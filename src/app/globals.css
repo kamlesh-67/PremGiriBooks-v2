@@ -1,0 +1,205 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-dim: var(--accent-primary-dim);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* ERP-specific semantic tokens */
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
+  --color-ai: var(--ai);
+  --color-ai-foreground: var(--ai-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-navbar: var(--navbar);
+  --color-navbar-foreground: var(--navbar-foreground);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/*
+ * Light theme (default token set on :root).
+ * Values sourced from context/ui-context.md - never hardcode these
+ * elsewhere, always consume through the semantic tokens below.
+ */
+:root {
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f1f5f9;
+  --bg-subtle: #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-subtle: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --accent-primary: #0891b2;
+  --accent-primary-dim: rgba(8, 145, 178, 0.1);
+  --accent-ai: #6457f9;
+  --accent-ai-text: #4f46e5;
+  --state-success: #16a34a;
+  --state-warning: #d97706;
+  --state-error: #dc2626;
+
+  /* Foregrounds chosen per-color to clear WCAG AA (4.5:1) against the token above. */
+  --on-accent-primary: #0f172a;
+  --on-state-success: #0f172a;
+  --on-state-warning: #0f172a;
+  --on-state-error: #ffffff;
+  --on-accent-ai: #ffffff;
+
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent-primary);
+  --primary-foreground: var(--on-accent-primary);
+  --secondary: var(--bg-subtle);
+  --secondary-foreground: var(--text-secondary);
+  --muted: var(--bg-subtle);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--bg-elevated);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--state-error);
+  --destructive-foreground: var(--on-state-error);
+  --border: var(--border-default);
+  --input: var(--border-default);
+  --ring: var(--accent-primary);
+  --radius: 0.625rem;
+
+  --surface: var(--bg-surface);
+  --elevated: var(--bg-elevated);
+  --success: var(--state-success);
+  --success-foreground: var(--on-state-success);
+  --warning: var(--state-warning);
+  --warning-foreground: var(--on-state-warning);
+  --error: var(--state-error);
+  --error-foreground: var(--on-state-error);
+  --ai: var(--accent-ai);
+  --ai-foreground: var(--on-accent-ai);
+  --sidebar: var(--bg-surface);
+  --sidebar-foreground: var(--text-primary);
+  --navbar: var(--bg-surface);
+  --navbar-foreground: var(--text-primary);
+}
+
+/* Dark theme (default active theme, applied via next-themes on <html>). */
+.dark {
+  --bg-base: #080809;
+  --bg-surface: #111114;
+  --bg-elevated: #18181c;
+  --bg-subtle: #1e1e23;
+  --border-default: #2a2a30;
+  --border-subtle: #3a3a42;
+  --text-primary: #f0f0f4;
+  --text-secondary: #c0c0cc;
+  --text-muted: #808090;
+  --accent-primary: #00c8d4;
+  --accent-primary-dim: rgba(0, 200, 212, 0.12);
+  --accent-ai: #6457f9;
+  --accent-ai-text: #8b82ff;
+  --state-success: #34d399;
+  --state-warning: #fbbf24;
+  --state-error: #ff4d4f;
+
+  --on-accent-primary: #080809;
+  --on-state-success: #080809;
+  --on-state-warning: #080809;
+  --on-state-error: #080809;
+  --on-accent-ai: #f0f0f4;
+
+  --background: var(--bg-base);
+  --foreground: var(--text-primary);
+  --card: var(--bg-surface);
+  --card-foreground: var(--text-primary);
+  --popover: var(--bg-elevated);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--accent-primary);
+  --primary-foreground: var(--on-accent-primary);
+  --secondary: var(--bg-subtle);
+  --secondary-foreground: var(--text-secondary);
+  --muted: var(--bg-subtle);
+  --muted-foreground: var(--text-muted);
+  --accent: var(--bg-elevated);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--state-error);
+  --destructive-foreground: var(--on-state-error);
+  --border: var(--border-default);
+  --input: var(--border-default);
+  --ring: var(--accent-primary);
+
+  --surface: var(--bg-surface);
+  --elevated: var(--bg-elevated);
+  --success: var(--state-success);
+  --success-foreground: var(--on-state-success);
+  --warning: var(--state-warning);
+  --warning-foreground: var(--on-state-warning);
+  --error: var(--state-error);
+  --error-foreground: var(--on-state-error);
+  --ai: var(--accent-ai);
+  --ai-foreground: var(--on-accent-ai);
+  --sidebar: var(--bg-surface);
+  --sidebar-foreground: var(--text-primary);
+  --navbar: var(--bg-surface);
+  --navbar-foreground: var(--text-primary);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer utilities {
+  /* Monetary values: monospaced tabular digits, right-aligned per ui-context.md. */
+  .font-financial {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+}

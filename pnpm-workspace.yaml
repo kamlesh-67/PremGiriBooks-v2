@@ -1,3 +1,10 @@
 ignoredBuiltDependencies:
+  - electron-winstaller
   - sharp
   - unrs-resolver
+
+onlyBuiltDependencies:
+  - "@prisma/client"
+  - "@prisma/engines"
+  - prisma
+  - electron

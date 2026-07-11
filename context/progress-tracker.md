@@ -1,0 +1,85 @@
+# Progress Tracker
+
+Update this file whenever the current phase, active feature, or implementation state changes.
+
+## Current Phase
+
+- Phase 03: Local Storage & Desktop Foundation — see `context/feature-specs/04-Local-Storage-&-Desktop-Foundation` — complete, ready for review/commit.
+
+## Current Goal
+
+- Establish desktop-specific infrastructure (storage service, typed settings, centralized storage keys, theme persistence) ahead of database/ERP work. No Prisma models, ERP settings, Company settings, APIs, UI pages, or business modules — infrastructure only.
+
+## Completed
+
+- Phase 03: Local Storage & Desktop Foundation — desktop infrastructure only, no database models or business modules.
+  - `src/lib/local-storage.ts`: exports a `StorageService` interface (`get`/`set`/`remove`/`clear`, generic over `T`, JSON-serialized) plus a `localStorageService` singleton backed by browser `localStorage`. Guards every method with `typeof window === "undefined"` so it's safe to import from code that also renders on the server (Next.js SSR). Call sites depend only on the interface, so swapping the backing implementation later (e.g. an Electron-`electron-store`-backed service over IPC) won't require touching callers.
+  - `src/types/settings.ts`: strict interfaces/types for desktop settings — `ThemeMode`, `DateFormat`, `TimeFormat` unions, and `ThemeSettings`, `WindowSettings` (width/height/x/y/isMaximized), `ApplicationSettings` (theme, language, currency, dateFormat, timeFormat, autoBackupEnabled, backupIntervalMinutes) interfaces. No `any`.
+  - `src/config/app-settings.ts`: `DEFAULT_APPLICATION_SETTINGS` constant (dark theme, `en`, `INR`, `DD/MM/YYYY`, `24h`, auto-backup on, 60-minute interval) typed against `ApplicationSettings`. No settings UI.
+  - `src/constants/storage-keys.ts`: `STORAGE_KEYS` const object (`APP_THEME`, `WINDOW_STATE`, `LAST_COMPANY`, `LAST_BRANCH`, `LAST_FINANCIAL_YEAR`, `BACKUP_LOCATION`) plus a derived `StorageKey` union — the single source for storage key literals.
+  - `src/components/providers/theme-provider.tsx`: added `storageKey={STORAGE_KEYS.APP_THEME}` to the existing `next-themes` provider so theme persistence reads/writes the centralized key instead of `next-themes`' default `"theme"` literal. `next-themes` still owns its own internal localStorage read/write (that's the library's job, not application code reaching for `window.localStorage` directly) — rewriting its persistence to go through `localStorageService` would duplicate already-working, hydration-safe logic from Phase 02 for no behavioral gain. `defaultTheme="dark"` (unchanged from Phase 01) satisfies the "default to Dark Mode" requirement; restore-on-startup and remember-selection were already correct, now keyed centrally.
+  - Window state: only the `WindowSettings` interface was defined, per the spec's explicit "do not implement persistence yet, only define the interfaces" instruction — no window-state service or IPC wiring was added.
+  - No Prisma models, ERP/company settings, database configuration, APIs, UI pages, or business modules were introduced, per the phase's "Do Not" list.
+  - Verified: `tsc --noEmit` clean, `eslint src` clean, `next build` succeeds.
+
+- Phase 02: Application Shell — reusable desktop shell only, no ERP modules or business logic.
+  - `src/components/layout/app-shell.tsx`: client component holding `collapsed` sidebar state (`useState`); composes `TopNavbar` → (`Sidebar` + `Content`) → `StatusBar` in a `flex h-screen flex-col overflow-hidden` wrapper so the shell always fills the viewport.
+  - `src/components/layout/top-navbar.tsx`: sticky header — logo (Lucide `BookOpen`) + app name on the left, a disabled global-search `Input` (placeholder text from the spec, `Search` icon) centered, and `ThemeToggle` + disabled Notifications/User-menu icon buttons on the right. Search, notifications, and user menu are intentionally non-functional placeholders (`disabled`), per the phase's "Do Not" list (no search logic, no notifications, no user profile).
+  - `src/components/layout/sidebar.tsx` + `sidebar-item.tsx`: collapsible nav (`w-16` collapsed / `w-60` expanded, animated via `transition-[width]`), toggle button at the top, `ScrollArea`-wrapped list of the 10 placeholder nav items (Dashboard, Masters, Sales, Purchase, Inventory, Accounting, GST, Reports, Employees, Settings) with Lucide icons. Items render as plain `<button>`s (no `Link`/routing yet, per spec); when collapsed each is wrapped in a `Tooltip` so the label is still discoverable/accessible icon-only.
+  - `src/components/layout/content.tsx`: `<main>` landmark, `flex-1 overflow-y-auto`, accepts `children` + optional `className` for nested layouts.
+  - `src/components/layout/status-bar.tsx`: `<footer>` landmark with placeholder fields (Company, FY, Branch all `—`; Database shown as static `"Local"` rather than a fake connected/disconnected state, since no real check exists yet) plus a live Theme field read from `next-themes`.
+  - `src/components/common/theme-toggle.tsx`: `next-themes`-backed Light/Dark/System switcher using `DropdownMenu` + Lucide `Sun`/`Moon`/`Monitor`, per the spec's explicit theme-toggle requirement.
+  - `src/hooks/use-mounted.ts`: shared `useSyncExternalStore`-based mount-detection hook (server snapshot `false`, client snapshot `true`), used by `ThemeToggle` and `StatusBar` to avoid a theme-driven SSR/client markup mismatch. Written this way instead of the common `useState` + `useEffect(() => setState(true))` pattern because the project's `react-hooks/set-state-in-effect` ESLint rule flags synchronous `setState` in an effect body — `useSyncExternalStore` is the lint-clean equivalent for this specific "has the client mounted" check.
+  - `src/app/page.tsx` now wraps its existing design-system placeholder text in `AppShell`, so the shell is actually exercised/visible rather than just defined — no dashboard or business content was added.
+  - No routing, auth, company selector, notifications logic, search logic, or business modules were introduced, per the phase's "Do Not" section.
+  - Verified: `tsc --noEmit` clean, `eslint src` clean (after fixing the two `set-state-in-effect` violations), `next build` succeeds, and a real `next dev` request to `/` was inspected — confirms server-rendered `<header>`/`<nav aria-label="Primary">`/`<main>`/`<footer>` landmarks, all 10 sidebar items, the search placeholder text, and the status bar fields (including live "Theme": dark, matching the `defaultTheme="dark"` provider default) are all present in the actual HTML, not just the source.
+
+- Phase 01: Design System — foundation only, no ERP screens or business modules.
+  - Ran `shadcn@latest init` (v4.13.0, `-d` defaults → template `next`, preset `base-nova`). The project now uses shadcn's **Base UI** (`@base-ui/react`) component library rather than Radix — this is the CLI's current default, not a manual choice. `components.json` records `style: "base-nova"`, `baseColor: "neutral"`, aliases already matching the existing `@/*` import alias.
+  - Installed all required components via the CLI: `button`, `card`, `input`, `label`, `dialog`, `alert-dialog`, `dropdown-menu`, `sheet`, `tabs`, `table`, `scroll-area`, `tooltip`, `select`, `popover`, `checkbox`, `switch`, `separator`, `badge`, `skeleton`, `sonner`, `navigation-menu`, `breadcrumb`, `progress`, `avatar` — all in `src/components/ui/`, none hand-modified after generation.
+  - `form`: the `@shadcn/form` registry entry is an empty stub for the `base-nova` style (Base UI form support isn't published there yet). Hand-authored `src/components/ui/form.tsx` reproducing the standard shadcn Form API (`Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormDescription`, `FormMessage`, `useFormField`) on top of `react-hook-form` + the existing `Label` component, using `React.cloneElement` for control prop-merging instead of Base UI's `Field.Control` (which forces its own `<input>` and doesn't compose with our existing Input/Select/Checkbox wrappers). Functionally and API-compatible with the classic shadcn form pattern.
+  - `src/lib/utils.ts`: `cn()` helper (clsx + tailwind-merge), generated by the CLI.
+  - Rewrote `src/app/globals.css` with the full ERP color system from `ui-context.md`: primitive tokens (`--bg-base`, `--bg-surface`, `--bg-elevated`, `--bg-subtle`, `--border-default`, `--border-subtle`, `--text-primary/secondary/muted`, `--accent-primary(-dim)`, `--accent-ai(-text)`, `--state-success/warning/error`) defined once per theme (`:root` = light, `.dark` = dark) and mapped onto both the standard shadcn tokens (`background`, `foreground`, `card`, `popover`, `primary`, `secondary`, `muted`, `accent`, `destructive`, `border`, `input`, `ring`) and the ERP-specific tokens (`surface`, `elevated`, `success`, `warning`, `error`, `ai`, `sidebar`, `navbar`, each with a paired `-foreground`), all exposed to Tailwind through `@theme inline`. Removed the unused chart/multi-part sidebar tokens the CLI scaffolds by default (no chart or Sidebar component is in scope).
+  - Foreground/background pairings were chosen per color and verified against WCAG AA (4.5:1) with a computed contrast check — e.g. dark theme uses `--bg-base` (near-black) as the on-color text for primary/success/warning/error since it beats white text on those bright tokens; the AI accent (`#6457F9`) tops out around 4.1–4.3:1 with either foreground since it's a mid-luminance brand purple — acceptable for large text/UI components (3:1) but flagged here in case a future audit wants a stricter AA pass for body-text-sized AI content.
+  - Added a `.font-financial` utility (`@layer utilities`) combining `font-mono` + `tabular-nums` + right alignment, for the "monospaced, tabular, right-aligned monetary values" rule in `ui-context.md` — a utility class, not a business component.
+  - `src/components/providers/theme-provider.tsx`: wraps `next-themes` (`attribute="class"`, `defaultTheme="dark"`, `enableSystem`, `disableTransitionOnChange`).
+  - `src/app/layout.tsx`: wraps children in `ThemeProvider` → `TooltipProvider` (required by the installed Tooltip component) and renders `<Toaster />` (sonner) at the root; `<html>` has `suppressHydrationWarning` (required by next-themes) and updated metadata (title/description) away from the create-next-app placeholder.
+  - `src/app/page.tsx` was trimmed to a minimal placeholder using semantic tokens (`bg-background`, `text-foreground`, `text-muted-foreground`) only to confirm the tokens render — no layout, navigation, or dashboard content was added, per the phase's "Do Not" list.
+  - Verified: `tsc --noEmit` clean, `next build` succeeds (Turbopack), `eslint src` clean, and the dev server serves the home page with the expected semantic classes and the next-themes bootstrap script present (dark class applies client-side to avoid the hydration flash).
+
+- Phase 00: Project Setup (Electron + Next.js) — infrastructure only, no ERP modules.
+  - Moved the Next.js app into `src/app` (App Router, `src` directory, `@/*` alias updated in `tsconfig.json`).
+  - Created full folder structure: `docs/`, `electron/`, `prisma/`, `src/{components/{ui,common,layout},modules,engines,database,lib,hooks,types,utils,config,constants,styles}`.
+  - Installed dependencies: prisma, @prisma/client, zod, zustand, @tanstack/react-query, react-hook-form, clsx, class-variance-authority, tailwind-merge, date-fns, lucide-react, sonner, next-themes (desktop deps — electron, electron-builder, concurrently, wait-on, cross-env — were already present).
+  - `electron/main.ts`: creates a `BrowserWindow` with `contextIsolation: true`, `nodeIntegration: false`, `autoHideMenuBar: true`, a secure preload script; loads `http://localhost:3000` in development, structured to load a packaged build in production. No auto-updates, no IPC handlers.
+  - `electron/preload.ts`: exposes an empty API via `contextBridge.exposeInMainWorld("api", {})`. No business logic.
+  - `tsconfig.electron.json`: compiles `electron/*.ts` (CommonJS) to `dist-electron/`, separate from the Next.js TS build.
+  - `package.json`: `main` set to `dist-electron/main.js`; `dev` runs Next.js and Electron concurrently (Electron waits on `http://localhost:3000` via `wait-on` before launching); `build` runs `next build` + electron tsc.
+  - Prisma initialized with SQLite datasource (`prisma/schema.prisma`, `prisma.config.ts` per Prisma 7's config-based env loading). No models, no migrations.
+  - `.env.example` created with `DATABASE_URL`, `APP_NAME`, `APP_VERSION`, `NODE_ENV` (`.gitignore` updated so `.env.example` is tracked while real `.env` stays ignored).
+  - Verified: `next build` succeeds, `eslint` clean, `tsc --noEmit` clean, Electron TS compiles, and Electron genuinely launches a `BrowserWindow` (confirmed via real `electron.exe` processes attempting to load the dev server).
+
+## In Progress
+
+- None — Phase 03 complete and ready for review/commit.
+
+## Next Up
+
+- 05-prisma-setup (referenced as the follow-on phase in `04-Local-Storage-&-Desktop-Foundation`'s closing line; no such file exists yet in `context/feature-specs/` — same numbering gap seen before between earlier phases).
+
+## Open Questions
+
+- None.
+
+## Architecture Decisions
+
+- Prisma 7 requires `prisma.config.ts` for datasource URL/env loading (schema.prisma alone no longer carries `url = env(...)`); added `dotenv` as a dev dependency for this. Generator kept as `prisma-client-js` (classic client) to match the already-installed `@prisma/client` package.
+- `styles/` was created empty per the folder-structure spec; `globals.css` stays alongside `src/app/layout.tsx` per Next.js App Router convention since the spec didn't direct otherwise.
+- shadcn's CLI (v4.13.0) now defaults to the **Base UI** (`@base-ui/react`) primitive library under the `base-nova` preset instead of Radix. This is the tool's current default behavior for a fresh `init`, not a deliberate architectural pick — every generated component in `src/components/ui/` is Base UI-backed. If a future phase needs a component the `base-nova` registry hasn't published yet (as happened with `form`), the fix is to hand-author it against the existing Base UI/react-hook-form pattern in `src/components/ui/form.tsx`, not to mix in Radix-based equivalents.
+- `eslint.config.mjs` now ignores `dist-electron/**` (compiled Electron output from Phase 00 was tripping `no-require-imports`). `pnpm lint` passes clean project-wide.
+- No shadcn `sidebar` component is installed (Phase 01 deliberately removed the CLI's chart/sidebar tokens as out of scope). The Application Shell's sidebar is therefore hand-built (`sidebar.tsx` + `sidebar-item.tsx`) directly against the `--sidebar`/`--sidebar-foreground` tokens already in `globals.css`, composed from `Button`, `ScrollArea`, and `Tooltip` rather than a generated `Sidebar` primitive.
+- This project's ESLint config enables `react-hooks/set-state-in-effect`, which rejects the common `next-themes` "mounted" guard (`useState` + `useEffect(() => setState(true))`). The lint-clean replacement is `useSyncExternalStore` with a no-op subscribe, `() => true` client snapshot, and `() => false` server snapshot — extracted to `src/hooks/use-mounted.ts` since both `ThemeToggle` and `StatusBar` need it. Reuse this hook (don't reintroduce the effect+setState pattern) anywhere else a component needs to defer client-only rendering until after hydration.
+
+## Session Notes
+
+- Sandboxed shells in this environment may have `ELECTRON_RUN_AS_NODE=1` set globally, which makes Electron behave like plain Node (so `require("electron").app` is `undefined`). This is a sandbox artifact, not a code defect — confirmed by unsetting the var and seeing real `electron.exe` GUI processes launch correctly. Run `pnpm dev` from a normal terminal to see the actual window.
