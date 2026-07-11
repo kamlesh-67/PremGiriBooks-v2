@@ -16,7 +16,7 @@ Do **not** implement business logic.
 
 The application follows an **Offline-First Architecture**.
 
-SQLite is the default database for the MVP.
+PostgreSQL (Local) is the primary database, per `architecture-context.md` and `code-standards.md`. It runs locally on the same machine or office network — no external/cloud database connection is required for core business operations.
 
 Prisma will act as the single database access layer.
 
@@ -30,9 +30,10 @@ Install the latest compatible versions of:
 
 * prisma
 * @prisma/client
-* @prisma/adapter-better-sqlite3
+* @prisma/adapter-pg
+* pg
 
-Prisma 7 requires a driver adapter to connect to SQLite; `@prisma/adapter-better-sqlite3` is required for this, not optional.
+Prisma 7 requires a driver adapter to connect to PostgreSQL; `@prisma/adapter-pg` (backed by `pg`) is required for this, not optional.
 
 Do not install additional database libraries.
 
@@ -46,7 +47,7 @@ Requirements
 
 * Create the `prisma/` directory.
 * Create `schema.prisma`.
-* Configure SQLite as the datasource.
+* Configure PostgreSQL as the datasource.
 * Generate Prisma Client.
 
 Do not create migrations yet.
@@ -55,23 +56,15 @@ Do not create migrations yet.
 
 # Database Configuration
 
-Configure SQLite.
-
-Database file
-
-```text
-prisma/premgiri.db
-```
+Configure PostgreSQL.
 
 Datasource
 
 ```text
-provider = "sqlite"
+provider = "postgresql"
 ```
 
 Keep the configuration simple.
-
-Future database providers may be added later.
 
 ---
 
@@ -86,10 +79,10 @@ Create or update
 Use
 
 ```text
-DATABASE_URL="file:./prisma/premgiri.db"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/premgiri_books?schema=public"
 ```
 
-Do not introduce additional environment variables.
+A local PostgreSQL server must be running and reachable at this connection string. Adjust user/password/port to match the local instance; do not introduce additional environment variables.
 
 ---
 
@@ -104,7 +97,7 @@ src/lib/prisma.ts
 Requirements
 
 * Export a singleton Prisma Client.
-* Construct the client with the `@prisma/adapter-better-sqlite3` driver adapter (required by Prisma 7 for SQLite).
+* Construct the client with the `@prisma/adapter-pg` driver adapter (required by Prisma 7 for PostgreSQL).
 * Prevent multiple Prisma instances during development.
 * Follow Prisma best practices.
 * Use strict TypeScript.
@@ -162,7 +155,7 @@ Future modules must never
 
 * Execute raw SQL unless absolutely necessary.
 * Create additional database clients.
-* Access SQLite directly.
+* Access PostgreSQL directly.
 
 All database communication must pass through Prisma.
 
@@ -206,7 +199,7 @@ This task prepares the database infrastructure only.
 Verify
 
 * Prisma initializes successfully.
-* SQLite datasource is configured.
+* PostgreSQL datasource is configured.
 * Prisma Client is generated.
 * `src/lib/prisma.ts` exports a singleton instance.
 * The project builds without errors.
