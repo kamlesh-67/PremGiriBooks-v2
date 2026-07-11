@@ -8,3 +8,110 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// -----------------------------------------------------------------------------
+// Shared Field Convention (documentation only — not yet applied to every model)
+//
+// Every future business model (Customer, Product, Voucher, etc.) should follow
+// this convention:
+//
+// Required
+//   id         String   @id @default(uuid())
+//   createdAt  DateTime @default(now())
+//   updatedAt  DateTime @updatedAt
+//
+// Optional (add when the model needs them)
+//   createdBy  String?
+//   updatedBy  String?
+//   deletedAt  DateTime?
+//   remarks    String?
+//
+// The foundation models below only implement the required fields; optional
+// audit/soft-delete fields are documented here for later phases to reuse.
+// -----------------------------------------------------------------------------
+
+model Company {
+  id             String   @id @default(uuid())
+  companyName    String
+  legalName      String
+  gstin          String?  @unique
+  pan            String?
+  address        String?
+  contactNumber  String?
+  email          String?
+  website        String?
+  logo           String?
+  currency       String   @default("INR")
+  timeZone       String   @default("Asia/Kolkata")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  financialYears FinancialYear[]
+  branches       Branch[]
+  users          User[]
+
+  @@index([companyName])
+}
+
+model FinancialYear {
+  id        String   @id @default(uuid())
+  companyId String
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+  isClosed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company  @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, name])
+  @@index([companyId, isCurrent])
+}
+
+model Branch {
+  id              String   @id @default(uuid())
+  companyId       String
+  branchName      String
+  branchCode      String
+  address         String?
+  contactNumber   String?
+  gstRegistration String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company         Company  @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, branchCode])
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  fullName  String
+  email     String   @unique
+  mobile    String?
+  isActive  Boolean  @default(true)
+  companyId String
+  roleId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company   Company  @relation(fields: [companyId], references: [id])
+  role      Role     @relation(fields: [roleId], references: [id])
+
+  @@index([companyId])
+  @@index([roleId])
+}
+
+model Role {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+}
