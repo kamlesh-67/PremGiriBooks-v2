@@ -21,8 +21,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { SidebarItem } from "@/components/layout/sidebar-item";
 
 const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: "Dashboard" },
-  { icon: Boxes, label: "Masters" },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/" },
+  { icon: Boxes, label: "Masters", href: "/company", adminOnly: true },
   { icon: ShoppingCart, label: "Sales" },
   { icon: Truck, label: "Purchase" },
   { icon: Package, label: "Inventory" },
@@ -36,9 +36,12 @@ const NAV_ITEMS = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  isAdmin: boolean;
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ collapsed, onToggle, isAdmin }: SidebarProps) {
+  const visibleItems = NAV_ITEMS.filter((item) => !("adminOnly" in item && item.adminOnly) || isAdmin);
+
   return (
     <nav
       aria-label="Primary"
@@ -61,12 +64,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-1 p-2">
-          {NAV_ITEMS.map((item) => (
+          {visibleItems.map((item) => (
             <SidebarItem
               key={item.label}
               icon={item.icon}
               label={item.label}
               collapsed={collapsed}
+              href={"href" in item ? item.href : undefined}
             />
           ))}
         </div>
