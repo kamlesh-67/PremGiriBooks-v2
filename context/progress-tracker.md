@@ -4,13 +4,20 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 03: Local Storage & Desktop Foundation — see `context/feature-specs/04-Local-Storage-&-Desktop-Foundation` — complete, ready for review/commit.
+- Phase 04: Prisma Setup — see `context/feature-specs/05-Prisma-Setup.md` — complete, ready for review/commit.
 
 ## Current Goal
 
-- Establish desktop-specific infrastructure (storage service, typed settings, centralized storage keys, theme persistence) ahead of database/ERP work. No Prisma models, ERP settings, Company settings, APIs, UI pages, or business modules — infrastructure only.
+- Configure Prisma as the database access layer (client generation + singleton) ahead of ERP modeling. No models, migrations, seed data, APIs, repositories, services, or business logic — database infrastructure only.
 
 ## Completed
+
+- Phase 04: Prisma Setup — database infrastructure only, no ERP models or business logic.
+  - Most of this phase's datasource/config work was already done in Phase 00 (`prisma/schema.prisma` with `generator client { provider = "prisma-client-js" }` + `datasource db { provider = "sqlite" }`, `prisma.config.ts` supplying `DATABASE_URL` via `dotenv`, `.env.example` with `DATABASE_URL="file:./prisma/premgiri.db"`). This phase completed the remaining gaps: an actual local `.env` (copied from `.env.example`, stays git-ignored) so `prisma generate` can resolve the config, running `pnpm prisma generate` to materialize the Prisma Client (v7.8.0) into the pnpm virtual store, and the singleton client file.
+  - `src/lib/prisma.ts`: exports `prisma`, a `PrismaClient` singleton guarded by `globalForPrisma` (`globalThis` cast) so Next.js dev-mode hot-reload doesn't spawn a new client per reload; only attaches to `globalThis` outside `NODE_ENV=production`, per the standard Next.js + Prisma singleton pattern.
+  - No models, migrations, seed data, APIs, repositories, services, or authentication tables were created, per the phase's "Do Not" list — `schema.prisma` still only has `generator`/`datasource` blocks.
+  - Verified: `tsc --noEmit` clean, `eslint src` clean, `next build` succeeds (build log confirms `.env` is now being loaded).
+  - **Superseded later the same phase**: the SQLite datasource/adapter described above was migrated to PostgreSQL — see the "PostgreSQL confirmed as the primary database, SQLite dropped" entry under Architecture Decisions.
 
 - Phase 03: Local Storage & Desktop Foundation — desktop infrastructure only, no database models or business modules.
   - `src/lib/local-storage.ts`: exports a `StorageService` interface (`get`/`set`/`remove`/`clear`, generic over `T`, JSON-serialized) plus a `localStorageService` singleton backed by browser `localStorage`. Guards every method with `typeof window === "undefined"` so it's safe to import from code that also renders on the server (Next.js SSR). Call sites depend only on the interface, so swapping the backing implementation later (e.g. an Electron-`electron-store`-backed service over IPC) won't require touching callers.
@@ -61,18 +68,19 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## In Progress
 
-- None — Phase 03 complete and ready for review/commit.
+- None — Phase 04 complete and ready for review/commit.
 
 ## Next Up
 
-- 05-prisma-setup (referenced as the follow-on phase in `04-Local-Storage-&-Desktop-Foundation`'s closing line; no such file exists yet in `context/feature-specs/` — same numbering gap seen before between earlier phases).
+- 06-database-foundation (referenced as the follow-on phase in `05-Prisma-Setup.md`'s closing line; no such file exists yet in `context/feature-specs/` — same numbering gap seen before between earlier phases).
 
 ## Open Questions
 
-- None.
+- None — the SQLite-vs-PostgreSQL question below was resolved by the user (2026-07-11).
 
 ## Architecture Decisions
 
+- **PostgreSQL confirmed as the primary database, SQLite dropped** (2026-07-11, user decision). `05-Prisma-Setup.md` had directed SQLite for the MVP, contradicting `architecture-context.md`'s Technology Stack table and Data Storage section (both name PostgreSQL (Local)) and `code-standards.md`'s Database Standards ("PostgreSQL is the single source of truth"). User resolved the conflict in favor of the architecture docs. Migrated: `prisma/schema.prisma` datasource → `provider = "postgresql"`; `src/lib/prisma.ts` now builds the singleton with `@prisma/adapter-pg`'s `PrismaPg` adapter (constructed directly from `DATABASE_URL`, thrown error if unset) instead of `@prisma/adapter-better-sqlite3`; swapped the `@prisma/adapter-better-sqlite3`/`better-sqlite3` dependencies for `@prisma/adapter-pg` + `pg` (+ `@types/pg`); `.env`/`.env.example` `DATABASE_URL` now points at `postgresql://postgres:postgres@localhost:5432/premgiri_books?schema=public` — a local Postgres server must be running and reachable at this connection string (adjust credentials/port to match the local instance). `05-Prisma-Setup.md` updated throughout to describe PostgreSQL instead of SQLite. Verified with a live local Postgres instance (temporary Docker container matching the connection string): `$queryRaw` executed successfully through the adapter. The stale `prisma/premgiri.db` SQLite file (gitignored) was left in place rather than deleted, since deleting a pre-existing local data file wasn't part of what was authorized.
 - Prisma 7 requires `prisma.config.ts` for datasource URL/env loading (schema.prisma alone no longer carries `url = env(...)`); added `dotenv` as a dev dependency for this. Generator kept as `prisma-client-js` (classic client) to match the already-installed `@prisma/client` package.
 - `styles/` was created empty per the folder-structure spec; `globals.css` stays alongside `src/app/layout.tsx` per Next.js App Router convention since the spec didn't direct otherwise.
 - shadcn's CLI (v4.13.0) now defaults to the **Base UI** (`@base-ui/react`) primitive library under the `base-nova` preset instead of Radix. This is the tool's current default behavior for a fresh `init`, not a deliberate architectural pick — every generated component in `src/components/ui/` is Base UI-backed. If a future phase needs a component the `base-nova` registry hasn't published yet (as happened with `form`), the fix is to hand-author it against the existing Base UI/react-hook-form pattern in `src/components/ui/form.tsx`, not to mix in Radix-based equivalents.
