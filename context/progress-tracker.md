@@ -4,13 +4,19 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 03: Local Storage & Desktop Foundation — see `context/feature-specs/04-Local-Storage-&-Desktop-Foundation` — complete, ready for review/commit.
+- Phase 04: Prisma Setup — see `context/feature-specs/05-Prisma-Setup.md` — complete, ready for review/commit.
 
 ## Current Goal
 
-- Establish desktop-specific infrastructure (storage service, typed settings, centralized storage keys, theme persistence) ahead of database/ERP work. No Prisma models, ERP settings, Company settings, APIs, UI pages, or business modules — infrastructure only.
+- Configure Prisma as the database access layer (client generation + singleton) ahead of ERP modeling. No models, migrations, seed data, APIs, repositories, services, or business logic — database infrastructure only.
 
 ## Completed
+
+- Phase 04: Prisma Setup — database infrastructure only, no ERP models or business logic.
+  - Most of this phase's datasource/config work was already done in Phase 00 (`prisma/schema.prisma` with `generator client { provider = "prisma-client-js" }` + `datasource db { provider = "sqlite" }`, `prisma.config.ts` supplying `DATABASE_URL` via `dotenv`, `.env.example` with `DATABASE_URL="file:./prisma/premgiri.db"`). This phase completed the remaining gaps: an actual local `.env` (copied from `.env.example`, stays git-ignored) so `prisma generate` can resolve the config, running `pnpm prisma generate` to materialize the Prisma Client (v7.8.0) into the pnpm virtual store, and the singleton client file.
+  - `src/lib/prisma.ts`: exports `prisma`, a `PrismaClient` singleton guarded by `globalForPrisma` (`globalThis` cast) so Next.js dev-mode hot-reload doesn't spawn a new client per reload; only attaches to `globalThis` outside `NODE_ENV=production`, per the standard Next.js + Prisma singleton pattern.
+  - No models, migrations, seed data, APIs, repositories, services, or authentication tables were created, per the phase's "Do Not" list — `schema.prisma` still only has `generator`/`datasource` blocks.
+  - Verified: `tsc --noEmit` clean, `eslint src` clean, `next build` succeeds (build log confirms `.env` is now being loaded).
 
 - Phase 03: Local Storage & Desktop Foundation — desktop infrastructure only, no database models or business modules.
   - `src/lib/local-storage.ts`: exports a `StorageService` interface (`get`/`set`/`remove`/`clear`, generic over `T`, JSON-serialized) plus a `localStorageService` singleton backed by browser `localStorage`. Guards every method with `typeof window === "undefined"` so it's safe to import from code that also renders on the server (Next.js SSR). Call sites depend only on the interface, so swapping the backing implementation later (e.g. an Electron-`electron-store`-backed service over IPC) won't require touching callers.
@@ -61,15 +67,15 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## In Progress
 
-- None — Phase 03 complete and ready for review/commit.
+- None — Phase 04 complete and ready for review/commit.
 
 ## Next Up
 
-- 05-prisma-setup (referenced as the follow-on phase in `04-Local-Storage-&-Desktop-Foundation`'s closing line; no such file exists yet in `context/feature-specs/` — same numbering gap seen before between earlier phases).
+- 06-database-foundation (referenced as the follow-on phase in `05-Prisma-Setup.md`'s closing line; no such file exists yet in `context/feature-specs/` — same numbering gap seen before between earlier phases).
 
 ## Open Questions
 
-- None.
+- `architecture-context.md`'s technology stack table and Data Storage section both name **PostgreSQL (Local)** as the primary database, but `05-Prisma-Setup.md` explicitly directs **SQLite** for the MVP, and Phase 00 already implemented the datasource that way (`prisma/schema.prisma` → `provider = "sqlite"`, unchanged in this phase). Left `architecture-context.md` as-is rather than unilaterally rewriting a documented architectural decision — worth confirming with the user whether the doc should be updated to reflect SQLite-for-MVP-then-PostgreSQL-later, or whether a future phase is expected to migrate the datasource to PostgreSQL to match the doc as written.
 
 ## Architecture Decisions
 
