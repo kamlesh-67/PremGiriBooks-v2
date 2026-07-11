@@ -30,6 +30,9 @@ Install the latest compatible versions of:
 
 * prisma
 * @prisma/client
+* @prisma/adapter-better-sqlite3
+
+Prisma 7 requires a driver adapter to connect to SQLite; `@prisma/adapter-better-sqlite3` is required for this, not optional.
 
 Do not install additional database libraries.
 
@@ -101,6 +104,7 @@ src/lib/prisma.ts
 Requirements
 
 * Export a singleton Prisma Client.
+* Construct the client with the `@prisma/adapter-better-sqlite3` driver adapter (required by Prisma 7 for SQLite).
 * Prevent multiple Prisma instances during development.
 * Follow Prisma best practices.
 * Use strict TypeScript.
