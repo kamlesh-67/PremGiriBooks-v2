@@ -15,7 +15,7 @@ Do **not** implement Customers, Products, Inventory, Sales, Purchase, Accounting
 The application uses
 
 - Prisma
-- SQLite
+- PostgreSQL
 - Offline-First Architecture
 
 All future database models must follow the same conventions established in this task.
