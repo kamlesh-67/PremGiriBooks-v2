@@ -4,13 +4,25 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## Current Phase
 
-- Phase 04: Prisma Setup — see `context/feature-specs/05-Prisma-Setup.md` — complete, ready for review/commit.
+- Phase 05: Database Foundation — see `context/feature-specs/06-database-foundation.md` — complete, ready for review/commit.
 
 ## Current Goal
 
-- Configure Prisma as the database access layer (client generation + singleton) ahead of ERP modeling. No models, migrations, seed data, APIs, repositories, services, or business logic — database infrastructure only.
+- Design the foundational database structure (Company, FinancialYear, Branch, User, Role) and document the shared-field convention that every future ERP module must follow. No Customers, Products, Inventory, Sales, Purchase, Accounting, GST, or seed data — foundation models only.
 
 ## Completed
+
+- Phase 05: Database Foundation — shared entities and conventions only, no business modules.
+  - `prisma/schema.prisma`: added the five foundation models on top of the existing `generator`/`datasource` blocks (Phase 04 scope) — `Company`, `FinancialYear`, `Branch`, `User`, `Role` — plus a documentation-only comment block describing the shared-field convention (`id`/`createdAt`/`updatedAt` required, `createdBy`/`updatedBy`/`deletedAt`/`remarks` optional) for future models to reuse; per the spec, none of the optional audit fields were added to these five models yet.
+  - Relationships created exactly as specified, no more: `Company → FinancialYear`, `Company → Branch`, `Company → User`, `Role → User` (all one-to-many, FK on the "many" side). `User` has both a required `companyId`/`company` relation and a required `roleId`/`role` relation.
+  - Constraints implemented directly in the Prisma schema (all supported natively, no raw SQL needed): `Company.gstin` unique (nullable-safe), `Branch` unique on `(companyId, branchCode)`, `User.username` unique, `User.email` unique, `Role.name` unique. Also added `FinancialYear` unique on `(companyId, name)` (not explicitly required by the spec, but a direct application of "clean naming"/"no duplicated fields" to prevent duplicate FY names per company).
+  - "Only one current financial year per company" is **not** a database-level constraint — Prisma's schema DSL has no partial/conditional unique index (a `WHERE isCurrent = true` unique index would require hand-written migration SQL), and the spec says "Implement only where supported by Prisma." Added `@@index([companyId, isCurrent])` for query performance; the invariant itself must be enforced in the future Company/FinancialYear service layer (check-then-set inside a transaction) when that business logic is built.
+  - Indexes: `Company.companyName`, `User.companyId`, `User.roleId`, plus the composite indexes above. Deliberately did not index every field the spec merely mentioned as an example (e.g., no separate index on `Company.email`) to avoid over-indexing.
+  - All IDs use `String @id @default(uuid())` per `code-standards.md`'s "Use UUIDs for public identifiers where appropriate." Table names use Prisma's default (model name as-is, no `@@map`), per the spec's "Default Prisma naming."
+  - Ran `pnpm prisma migrate dev --name database_foundation` against a temporary local Postgres (Docker container matching the `.env` `DATABASE_URL`, same approach used in Phase 04) — migration `20260711152943_database_foundation` applied cleanly; container was stopped/removed afterward since no persistent local Postgres server exists in this environment yet. Ran `pnpm prisma generate` to regenerate the Prisma Client (v7.8.0) against the new models.
+  - Verified beyond typecheck: wrote and ran a temporary smoke-test script (deleted after use) that created a `Role` → `Company` → `FinancialYear`/`Branch`/`User` chain through the real Prisma Client against the live Postgres container, fetched it back with nested `include`s (confirming all four relations resolve correctly), and cleaned up the rows — then deleted the script. This is a one-time verification artifact, not a permanent test suite (no seed data or tests were requested in this phase).
+  - No Customers, Suppliers, Products, Categories, Inventory, Sales, Purchase, Accounting, GST, Employees, Reports, Vouchers, Ledgers, permissions, authentication, or seed data were created, per the phase's "Do Not" list.
+  - Verified: `tsc --noEmit` clean, `eslint` clean, `next build` succeeds, Prisma Client generates without validation errors, migration applies successfully against a real Postgres instance, and a live runtime smoke test round-trips data through all four relationships correctly.
 
 - Phase 04: Prisma Setup — database infrastructure only, no ERP models or business logic.
   - Most of this phase's datasource/config work was already done in Phase 00 (`prisma/schema.prisma` with `generator client { provider = "prisma-client-js" }` + `datasource db { provider = "sqlite" }`, `prisma.config.ts` supplying `DATABASE_URL` via `dotenv`, `.env.example` with `DATABASE_URL="file:./prisma/premgiri.db"`). This phase completed the remaining gaps: an actual local `.env` (copied from `.env.example`, stays git-ignored) so `prisma generate` can resolve the config, running `pnpm prisma generate` to materialize the Prisma Client (v7.8.0) into the pnpm virtual store, and the singleton client file.
@@ -68,11 +80,11 @@ Update this file whenever the current phase, active feature, or implementation s
 
 ## In Progress
 
-- None — Phase 04 complete and ready for review/commit.
+- None — Phase 05 complete and ready for review/commit.
 
 ## Next Up
 
-- 06-database-foundation (referenced as the follow-on phase in `05-Prisma-Setup.md`'s closing line; no such file exists yet in `context/feature-specs/` — same numbering gap seen before between earlier phases).
+- 07-authentication (referenced as the follow-on phase in `06-database-foundation.md`'s closing line; no such file exists yet in `context/feature-specs/` — same numbering gap seen before between earlier phases). Will need real password/auth wiring for the `User` model created in Phase 05.
 
 ## Open Questions
 
