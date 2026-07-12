@@ -34,7 +34,7 @@ host itself.
 
 Confirmed the finding was still accurate before changing anything:
 
-```
+```console
 docker port premgir-books-v2-postgres-1
 → 5432/tcp -> 0.0.0.0:5432   (before the fix)
 ```
