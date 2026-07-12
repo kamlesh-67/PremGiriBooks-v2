@@ -6,5 +6,7 @@ ignoredBuiltDependencies:
 onlyBuiltDependencies:
   - "@prisma/client"
   - "@prisma/engines"
-  - prisma
+  - argon2
   - electron
+  - esbuild
+  - prisma
