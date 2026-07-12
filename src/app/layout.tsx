@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { AuthProvider } from "@/components/providers/auth-provider";
 import { CompanyProvider } from "@/components/providers/company-provider";
 import { FinancialYearProvider } from "@/components/providers/financial-year-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { getCurrentUserOrNull } from "@/lib/current-user";
 import { getCurrentCompany } from "@/lib/current-company";
 import { getCurrentFinancialYear } from "@/lib/current-financial-year";
 
@@ -29,6 +31,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const currentUser = await getCurrentUserOrNull();
   const currentCompany = await getCurrentCompany();
   const currentFinancialYear = await getCurrentFinancialYear();
 
@@ -40,12 +43,14 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
-          <CompanyProvider initialCompany={currentCompany}>
-            <FinancialYearProvider initialFinancialYear={currentFinancialYear}>
-              <TooltipProvider>{children}</TooltipProvider>
-              <Toaster />
-            </FinancialYearProvider>
-          </CompanyProvider>
+          <AuthProvider initialUser={currentUser}>
+            <CompanyProvider initialCompany={currentCompany}>
+              <FinancialYearProvider initialFinancialYear={currentFinancialYear}>
+                <TooltipProvider>{children}</TooltipProvider>
+                <Toaster />
+              </FinancialYearProvider>
+            </CompanyProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

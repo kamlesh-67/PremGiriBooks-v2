@@ -117,19 +117,21 @@ model Branch {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  username  String   @unique
-  fullName  String
-  email     String   @unique
-  mobile    String?
-  isActive  Boolean  @default(true)
-  companyId String
-  roleId    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  username     String   @unique
+  fullName     String
+  email        String   @unique
+  mobile       String?
+  passwordHash String
+  isActive     Boolean  @default(true)
+  companyId    String
+  roleId       String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id])
-  role    Role    @relation(fields: [roleId], references: [id])
+  company  Company   @relation(fields: [companyId], references: [id])
+  role     Role      @relation(fields: [roleId], references: [id])
+  sessions Session[]
 
   @@index([companyId])
   @@index([roleId])
@@ -142,4 +144,27 @@ model Role {
   updatedAt DateTime @updatedAt
 
   users User[]
+}
+
+model Session {
+  id     String @id @default(uuid())
+  userId String
+
+  // Optional context per 07-authentication.md — Company/Branch/Financial Year
+  // selection remain their own cookie-based mechanisms (current-company.ts,
+  // current-financial-year.ts); these columns exist to match the spec's
+  // session data shape but are not populated by this phase.
+  companyId       String?
+  branchId        String?
+  financialYearId String?
+
+  rememberMe Boolean  @default(false)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }

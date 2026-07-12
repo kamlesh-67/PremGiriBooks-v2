@@ -1,4 +1,5 @@
 export const COOKIE_KEYS = {
+  SESSION_TOKEN: "session_token",
   ACTIVE_COMPANY_ID: "active_company_id",
   ACTIVE_FINANCIAL_YEAR_ID: "active_financial_year_id",
 } as const;

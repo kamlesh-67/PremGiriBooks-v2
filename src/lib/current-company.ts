@@ -2,6 +2,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
+import { AuthenticationError } from "@/lib/current-user";
 import { companyService } from "@/modules/company/services/company-service";
 import type { CompanyWithSettings } from "@/types/company";
 
@@ -18,7 +19,20 @@ export const getCurrentCompany = cache(async (): Promise<CompanyWithSettings | n
     return null;
   }
 
-  const company = await companyService.getCompany(companyId);
+  // Fails closed: a stale active_company_id cookie can outlive its session
+  // (e.g. the session expired or the user was disabled since it was set).
+  // RootLayout calls this for every page, including the public /login page,
+  // so it must never throw AuthenticationError — return null instead.
+  let company: CompanyWithSettings | null;
+  try {
+    company = await companyService.getCompany(companyId);
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      return null;
+    }
+    throw error;
+  }
+
   if (!company || !company.isActive) {
     return null;
   }
