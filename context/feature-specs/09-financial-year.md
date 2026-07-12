@@ -85,9 +85,16 @@ Support
 - A Financial Year belongs to exactly one Company (`companyId`, already enforced by the schema).
 - `name` must be unique per company (already enforced by `@@unique([companyId, name])`).
 - Start Date must be strictly before End Date.
-- A new Financial Year's date range must not overlap any existing Financial Year for the same company.
-- Exactly one Financial Year per company may have `isCurrent = true`. This is **not** a database constraint (Prisma has no partial/conditional unique index) — enforce it in `financialYearService.setCurrent` with a check-then-set transaction that clears the previous current year before setting the new one.
+- Start Date and End Date are calendar-day boundaries and both **inclusive** — a Financial Year covers every calendar day from Start Date through End Date, End Date's day included. Store each as that calendar day's midnight (`00:00:00`); comparisons for overlap/adjacency below are on the calendar day, not the raw timestamp.
+- A new Financial Year's date range must not overlap any existing Financial Year for the same company: two ranges overlap when `newStart <= existingEnd AND newEnd >= existingStart`. Directly adjacent ranges are **not** overlaps and are valid — e.g. `2026-04-01..2027-03-31` followed immediately by `2027-04-01..2028-03-31` is allowed, since the first year's inclusive End Date (2027-03-31) falls one full calendar day before the second year's inclusive Start Date (2027-04-01).
+- Exactly one Financial Year per company may have `isCurrent = true`, enforced at two levels so concurrent requests can never leave two rows current:
+  - **Database**: add a hand-written partial unique index via a Prisma migration (`prisma migrate dev --create-only`, then edit the generated SQL — Prisma's schema DSL has no partial/conditional `@@unique`): `CREATE UNIQUE INDEX "financial_year_company_current_idx" ON "FinancialYear" ("companyId") WHERE "isCurrent" = true;`. This is the authoritative guarantee even if the service logic below has a bug.
+  - **Service**: `financialYearService.setCurrent` must clear the previous current year and set the new one inside a single Prisma `$transaction`, using either `Serializable` isolation (`{ isolationLevel: Prisma.TransactionIsolationLevel.Serializable }`) or an explicit row lock (`SELECT ... FOR UPDATE` on the company's current row) so two concurrent `setCurrent` calls for the same company cannot both succeed. Catch the resulting serialization failure (Postgres `40001`) or unique-violation (`23505`, from the partial index) and retry the transaction a small, bounded number of times before surfacing a clean "financial year was changed by another request, please retry" error — never let the raw Postgres error reach the UI. A bare check-then-set (read the current row, then two separate `update` calls with no transaction/isolation/locking) is exactly the race this rule exists to prevent and must not be used.
 - A closed Financial Year (`isClosed = true`) cannot be edited, cannot be set as current, and cannot be reopened in this task. Reopening is out of scope.
+- Closing the **current** Financial Year (a row where `isCurrent` and the target `isClosed` are both true before the operation) must, in the same transaction as setting `isClosed = true`, also clear `isCurrent` on that row — a closed year must never remain `isCurrent`. `financialYearService.closeFinancialYear` must then:
+  - If exactly one other open (`isClosed = false`) Financial Year exists for the company, automatically promote it to `isCurrent` (same transaction/locking discipline as `setCurrent` above).
+  - If zero or more than one other open Financial Year exists, do not guess which one to promote — clear the active Financial Year cookie (`clearCurrentFinancialYear()`) and let the request fall through to the Financial Year Selection screen (see below) so the user picks explicitly.
+  - Either way, the active Financial Year context (cookie and provider) must never be left pointing at the just-closed year, even for the remainder of the current request.
 - Only Administrator users may Create, Edit, Set Current, or Close a Financial Year.
 
 ---
@@ -101,6 +108,8 @@ Mirror the existing Company Selection flow (`08-company-management.md`):
 - If exactly one exists, or one is marked `isCurrent`, auto-select it.
 - If multiple exist and none is current, show a Financial Year Selection screen.
 - The selected Financial Year becomes part of the active working context alongside the active Company.
+
+This same flow is re-entered whenever the active Financial Year is closed and no single open year could be auto-promoted (see the closing-the-current-year rule above) — the cookie has already been cleared at that point, so the existing "no current Financial Year" branch above handles it without new logic.
 
 ---
 

@@ -57,9 +57,11 @@ Implement
 - Deactivate Role
 - Assign Permissions to a Role (matrix UI: module × action)
 
-Do not implement delete for roles already assigned to a user.
+Do not implement delete at all, for any role, assigned or unassigned. Matching the Company (`08-company-management.md`) and User (`10-user-management.md`) precedent, roles are never permanently deleted. `roleService` exposes no `deleteRole` method and no delete API route exists in this task — `deactivateRole` (`isActive = false`) is the only removal path, for every role regardless of whether it currently has assigned users.
 
-A role with active users cannot be removed — deactivate instead.
+Deactivating a role does **not** unassign it from users still referencing it via `roleId` — those users keep their existing role assignment (consistent with how a deactivated Company still has historical data attached). Deactivating a role only removes it from the selectable list when assigning/editing a user's role going forward; `10-user-management.md`'s user form must exclude inactive roles from its Role select.
+
+Attempting to call `deactivateRole` on the last remaining active Administrator-capable role must be rejected with a clean error (see the "last Administrator-capable role" rule below) — that is the one deactivation this task blocks; every other role, whether it has assigned users or not, can be deactivated.
 
 ---
 
@@ -95,7 +97,7 @@ Seed a default permission set for each of the six roles from `07-authentication.
 # Business Rules
 
 - A role's `name` must be unique (already enforced by the schema).
-- A role with one or more assigned users cannot be deactivated below having at least one active Administrator role in the system — do not let the last Administrator-capable role be removed.
+- The last active Administrator-capable role in the system cannot be deactivated — at least one active role with full Administrator access must always exist, mirroring `10-user-management.md`'s "last active Administrator user" rule at the role level.
 - Only Administrator users may Create, Edit, Deactivate roles or reassign permissions.
 - Permission checks default to **deny** — a role with no matching `RolePermission` row for a `(module, action)` pair has no access to it.
 
@@ -262,12 +264,14 @@ Those belong to future implementation tasks.
 Verify
 
 - Custom roles can be created, edited, and deactivated.
-- A role with active users cannot be deactivated.
-- The last Administrator-capable role cannot be removed.
+- A role with active users can be deactivated — existing users keep their `roleId` assignment; the role is only removed from future selection.
+- The last active Administrator-capable role cannot be deactivated, and no role — assigned or not — can be permanently deleted.
 - Permissions can be assigned per role via the module × action matrix.
 - The six default roles have sensible seeded permissions.
 - `hasPermission`/`assertPermission` default to deny on missing data.
 - No TypeScript errors.
 - No ESLint errors.
 
-After completion, the Phase 01 (Foundation) scope from `context/Phases/phases.md` is complete. The next feature-spec (numbered 12 onward) should be scoped from `context/Phases/phases.md`'s Phase 02 — Core ERP Platform when that work is explicitly started, not drafted speculatively ahead of time.
+Feature-spec 11 (this spec) itself falls under `context/Phases/phases.md`'s **Phase 02 — Core ERP Platform**, not Phase 01 — Foundation (see the feature-spec numbering table in `progress-tracker.md`) — `phases.md` lists "Role & Permission Management" explicitly under Phase 02. Completing this spec does not complete Phase 01: Foundation; `07-authentication.md`, also part of Phase 01 per `phases.md`, remains deliberately deferred and unimplemented regardless of this spec's status.
+
+After completion, the next feature-spec (numbered 12 onward) should be scoped from `phases.md`'s remaining Phase 02 — Core ERP Platform items (Company Settings, Branch Management, Document Numbering Engine, Audit Log Engine, Backup & Restore, Import Framework, Export Framework, File Manager, Notification System) when that work is explicitly started, not drafted speculatively ahead of time.
