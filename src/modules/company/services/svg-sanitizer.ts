@@ -1,25 +1,93 @@
-const SCRIPT_TAG_PATTERN = /<script[\s\S]*?>[\s\S]*?<\/script\s*>/gi;
-const FOREIGN_OBJECT_PATTERN = /<foreignObject[\s\S]*?>[\s\S]*?<\/foreignObject\s*>/gi;
-const EVENT_HANDLER_ATTRIBUTE_PATTERN = /\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*')/gi;
-const DANGEROUS_URI_ATTRIBUTE_PATTERN =
-  /\s+(?:xlink:href|href|src)\s*=\s*("(?:javascript|data):[^"]*"|'(?:javascript|data):[^']*')/gi;
-const DOCTYPE_OR_ENTITY_PATTERN = /<!(?:DOCTYPE|ENTITY)[\s\S]*?>/gi;
+import { JSDOM } from "jsdom";
+import DOMPurify, { type WindowLike } from "dompurify";
+
+const window = new JSDOM("").window;
+const purify = DOMPurify(window as unknown as WindowLike);
+
 const SVG_ROOT_PATTERN = /<svg[\s>]/i;
 
+const ALLOWED_SVG_TAGS = [
+  "svg",
+  "g",
+  "path",
+  "circle",
+  "ellipse",
+  "line",
+  "polyline",
+  "polygon",
+  "rect",
+  "text",
+  "tspan",
+  "defs",
+  "clippath",
+  "lineargradient",
+  "radialgradient",
+  "stop",
+  "title",
+  "desc",
+  "symbol",
+  "use",
+  "mask",
+  "pattern",
+];
+
+const ALLOWED_SVG_ATTRIBUTES = [
+  "id",
+  "class",
+  "viewbox",
+  "xmlns",
+  "width",
+  "height",
+  "x",
+  "y",
+  "x1",
+  "y1",
+  "x2",
+  "y2",
+  "cx",
+  "cy",
+  "r",
+  "rx",
+  "ry",
+  "d",
+  "fill",
+  "fill-rule",
+  "fill-opacity",
+  "stroke",
+  "stroke-width",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "stroke-dasharray",
+  "stroke-opacity",
+  "opacity",
+  "transform",
+  "points",
+  "offset",
+  "stop-color",
+  "stop-opacity",
+  "gradientunits",
+  "gradienttransform",
+  "clip-path",
+  "mask",
+  "preserveaspectratio",
+];
+
 /**
- * Best-effort strip of active-content vectors from an uploaded SVG (inline
- * scripts, event handlers, foreignObject, javascript:/data: URIs, external
- * entity declarations) before it's written to disk and served statically.
- * This is not a full XML sanitizer — it narrowly targets the well-known
- * SVG-upload XSS patterns for a logo image, not arbitrary untrusted SVG.
+ * Structurally sanitizes an uploaded SVG with DOMPurify (allow-listed SVG
+ * elements/attributes only) before it's written to disk and served
+ * statically — replaces an earlier regex-based approach, which is fragile
+ * against tag-casing/encoding tricks that a real parser handles correctly.
  */
 export function sanitizeSvg(content: string): string {
-  const sanitized = content
-    .replace(SCRIPT_TAG_PATTERN, "")
-    .replace(FOREIGN_OBJECT_PATTERN, "")
-    .replace(EVENT_HANDLER_ATTRIBUTE_PATTERN, "")
-    .replace(DANGEROUS_URI_ATTRIBUTE_PATTERN, "")
-    .replace(DOCTYPE_OR_ENTITY_PATTERN, "");
+  const sanitized = purify.sanitize(content, {
+    USE_PROFILES: { svg: true },
+    ALLOWED_TAGS: ALLOWED_SVG_TAGS,
+    ALLOWED_ATTR: ALLOWED_SVG_ATTRIBUTES,
+    FORBID_TAGS: ["script", "style", "foreignObject", "animate", "animateTransform", "set", "iframe"],
+    FORBID_ATTR: ["style", "onload", "onerror", "onclick", "onmouseover"],
+    ALLOW_DATA_ATTR: false,
+    WHOLE_DOCUMENT: false,
+  });
 
   if (!SVG_ROOT_PATTERN.test(sanitized)) {
     throw new Error("File does not appear to be a valid SVG image.");

@@ -30,12 +30,14 @@ export function SidebarItem({ icon: Icon, label, collapsed, href }: SidebarItemP
     </>
   );
 
+  const accessibleLabel = collapsed ? label : undefined;
+
   const button = href ? (
-    <Link href={href} className={itemClassName}>
+    <Link href={href} className={itemClassName} aria-label={accessibleLabel}>
       {content}
     </Link>
   ) : (
-    <button type="button" className={itemClassName}>
+    <button type="button" className={itemClassName} aria-label={accessibleLabel}>
       {content}
     </button>
   );

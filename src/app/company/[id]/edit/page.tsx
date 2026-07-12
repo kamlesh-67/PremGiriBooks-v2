@@ -21,9 +21,10 @@ export default async function EditCompanyPage({ params }: EditCompanyPageProps) 
     notFound();
   }
 
-  const settingsDefaults = company.settings
-    ? companySettingsSchema.parse(company.settings)
+  const settingsParseResult = company.settings
+    ? companySettingsSchema.safeParse(company.settings)
     : undefined;
+  const settingsDefaults = settingsParseResult?.success ? settingsParseResult.data : undefined;
   const isAdmin = await isCurrentUserAdmin();
 
   return (
@@ -50,8 +51,12 @@ export default async function EditCompanyPage({ params }: EditCompanyPageProps) 
             />
           </TabsContent>
           <TabsContent value="settings">
-            {settingsDefaults && (
+            {settingsDefaults ? (
               <CompanySettingsForm companyId={company.id} defaultValues={settingsDefaults} />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Company settings are still initializing. Please try again shortly.
+              </p>
             )}
           </TabsContent>
         </Tabs>

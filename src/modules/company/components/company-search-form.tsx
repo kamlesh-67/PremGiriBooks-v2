@@ -55,6 +55,7 @@ export function CompanySearchForm({ initialSearch, initialStatus }: CompanySearc
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search by name, GSTIN, or mobile number"
+          aria-label="Search companies"
           className="w-72 pl-8"
         />
       </div>

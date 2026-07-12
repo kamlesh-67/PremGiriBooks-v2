@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import type { CompanyPersistData } from "@/modules/company/utils/normalize-company-input";
+import { isRecordNotFoundError } from "@/modules/company/utils/prisma-errors";
 import type { CompanyListFilters, CompanyWithSettings } from "@/types/company";
 
 function buildWhere(filters: CompanyListFilters): Prisma.CompanyWhereInput {
@@ -50,20 +51,34 @@ export const companyRepository = {
     });
   },
 
-  update(id: string, data: CompanyPersistData): Promise<CompanyWithSettings> {
-    return prisma.company.update({
-      where: { id },
-      data,
-      include: { settings: true },
-    });
+  async update(id: string, data: CompanyPersistData): Promise<CompanyWithSettings | null> {
+    try {
+      return await prisma.company.update({
+        where: { id },
+        data,
+        include: { settings: true },
+      });
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        return null;
+      }
+      throw error;
+    }
   },
 
-  setActive(id: string, isActive: boolean): Promise<CompanyWithSettings> {
-    return prisma.company.update({
-      where: { id },
-      data: { isActive },
-      include: { settings: true },
-    });
+  async setActive(id: string, isActive: boolean): Promise<CompanyWithSettings | null> {
+    try {
+      return await prisma.company.update({
+        where: { id },
+        data: { isActive },
+        include: { settings: true },
+      });
+    } catch (error) {
+      if (isRecordNotFoundError(error)) {
+        return null;
+      }
+      throw error;
+    }
   },
 
   count(filters: CompanyListFilters): Promise<number> {

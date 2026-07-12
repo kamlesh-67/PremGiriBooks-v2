@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { AppShell } from "@/components/layout/app-shell";
 import { isCurrentUserAdmin } from "@/lib/current-user";
 import { CompanyForm } from "@/modules/company/components/company-form";
@@ -5,6 +7,10 @@ import { createCompanyAction } from "@/modules/company/actions/company-actions";
 
 export default async function NewCompanyPage() {
   const isAdmin = await isCurrentUserAdmin();
+
+  if (!isAdmin) {
+    redirect("/company");
+  }
 
   return (
     <AppShell isAdmin={isAdmin}>

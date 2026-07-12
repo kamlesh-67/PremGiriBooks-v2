@@ -16,7 +16,19 @@ export const companyService = {
     }
 
     const company = await companyRepository.findById(user.companyId);
-    return company ? [company] : [];
+    if (!company) {
+      return [];
+    }
+
+    if (filters.status === "active" && !company.isActive) {
+      return [];
+    }
+
+    if (filters.status === "inactive" && company.isActive) {
+      return [];
+    }
+
+    return [company];
   },
 
   async getCompany(id: string): Promise<CompanyWithSettings | null> {
@@ -37,16 +49,28 @@ export const companyService = {
   async updateCompany(id: string, input: CompanyInput): Promise<CompanyWithSettings> {
     await assertAdministrator();
     const data = normalizeCompanyInput(companySchema.parse(input));
-    return companyRepository.update(id, data);
+    const company = await companyRepository.update(id, data);
+    if (!company) {
+      throw new Error("Company not found.");
+    }
+    return company;
   },
 
   async activateCompany(id: string): Promise<CompanyWithSettings> {
     await assertAdministrator();
-    return companyRepository.setActive(id, true);
+    const company = await companyRepository.setActive(id, true);
+    if (!company) {
+      throw new Error("Company not found.");
+    }
+    return company;
   },
 
   async deactivateCompany(id: string): Promise<CompanyWithSettings> {
     await assertAdministrator();
-    return companyRepository.setActive(id, false);
+    const company = await companyRepository.setActive(id, false);
+    if (!company) {
+      throw new Error("Company not found.");
+    }
+    return company;
   },
 };
