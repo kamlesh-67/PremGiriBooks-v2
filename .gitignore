@@ -47,3 +47,7 @@ next-env.d.ts
 # prisma
 /prisma/*.db
 /prisma/*.db-journal
+
+# uploaded company logos
+/public/uploads/logos/*
+!/public/uploads/logos/.gitkeep

@@ -31,27 +31,55 @@ datasource db {
 // -----------------------------------------------------------------------------
 
 model Company {
-  id             String   @id @default(uuid())
-  companyName    String
-  legalName      String
-  gstin          String?  @unique
-  pan            String?
-  address        String?
-  contactNumber  String?
-  email          String?
-  website        String?
-  logo           String?
-  currency       String   @default("INR")
-  timeZone       String   @default("Asia/Kolkata")
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id              String   @id @default(uuid())
+  companyName     String
+  legalName       String
+  displayName     String?
+  businessType    String?
+  gstin           String?  @unique
+  pan             String?
+  tan             String?
+  cin             String?
+  mobileNumber    String?
+  alternateMobile String?
+  email           String?
+  website         String?
+  addressLine1    String?
+  addressLine2    String?
+  city            String?
+  state           String?
+  district        String?
+  country         String   @default("India")
+  pinCode         String?
+  currency        String   @default("INR")
+  currencySymbol  String   @default("₹")
+  decimalPlaces   Int      @default(2)
+  logo            String?
+  timeZone        String   @default("Asia/Kolkata")
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
+  settings       CompanySettings?
   financialYears FinancialYear[]
   branches       Branch[]
   users          User[]
 
   @@index([companyName])
+}
+
+model CompanySettings {
+  id             String   @id @default(uuid())
+  companyId      String   @unique
+  defaultTheme   String   @default("dark")
+  dateFormat     String   @default("DD/MM/YYYY")
+  timeFormat     String   @default("24h")
+  numberFormat   String   @default("en-IN")
+  currencyFormat String   @default("INR")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
 }
 
 model FinancialYear {
@@ -65,7 +93,7 @@ model FinancialYear {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company   Company  @relation(fields: [companyId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, name])
   @@index([companyId, isCurrent])
@@ -83,7 +111,7 @@ model Branch {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  company         Company  @relation(fields: [companyId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, branchCode])
 }
@@ -100,8 +128,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  company   Company  @relation(fields: [companyId], references: [id])
-  role      Role     @relation(fields: [roleId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+  role    Role    @relation(fields: [roleId], references: [id])
 
   @@index([companyId])
   @@index([roleId])
@@ -113,5 +141,5 @@ model Role {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users     User[]
+  users User[]
 }

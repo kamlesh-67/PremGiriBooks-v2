@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { CompanyProvider } from "@/components/providers/company-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { getCurrentCompany } from "@/lib/current-company";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,11 +22,13 @@ export const metadata: Metadata = {
   description: "Modular ERP for accounting, GST, inventory, and billing.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const currentCompany = await getCurrentCompany();
+
   return (
     <html
       lang="en"
@@ -33,8 +37,10 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
-          <TooltipProvider>{children}</TooltipProvider>
-          <Toaster />
+          <CompanyProvider initialCompany={currentCompany}>
+            <TooltipProvider>{children}</TooltipProvider>
+            <Toaster />
+          </CompanyProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -10,9 +10,10 @@ import { StatusBar } from "@/components/layout/status-bar";
 
 interface AppShellProps {
   children: ReactNode;
+  isAdmin?: boolean;
 }
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, isAdmin = false }: AppShellProps) {
   const [collapsed, setCollapsed] = React.useState(false);
 
   return (
@@ -22,6 +23,7 @@ export function AppShell({ children }: AppShellProps) {
         <Sidebar
           collapsed={collapsed}
           onToggle={() => setCollapsed((prev) => !prev)}
+          isAdmin={isAdmin}
         />
         <Content>{children}</Content>
       </div>
