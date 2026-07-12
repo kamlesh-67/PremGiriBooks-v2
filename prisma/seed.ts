@@ -2,16 +2,9 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { hashPassword } from "../src/lib/password";
-
-// Default roles per 07-authentication.md — "Do not implement custom roles yet."
-const DEFAULT_ROLES = [
-  "Administrator",
-  "Accountant",
-  "Sales",
-  "Purchase",
-  "Store Manager",
-  "Employee",
-];
+import { prisma as sharedPrisma } from "../src/lib/prisma";
+import { permissionService } from "../src/modules/roles/services/permission-service";
+import { DEFAULT_ROLE_NAMES } from "../src/constants/roles";
 
 // 07-authentication.md explicitly excludes a registration screen, so the very
 // first Administrator must be bootstrapped here. This default password is a
@@ -30,10 +23,20 @@ async function main(): Promise<void> {
   const prisma = new PrismaClient({ adapter });
 
   try {
-    for (const name of DEFAULT_ROLES) {
+    for (const name of DEFAULT_ROLE_NAMES) {
       await prisma.role.upsert({ where: { name }, update: {}, create: { name } });
     }
-    console.log(`Seed: ensured ${DEFAULT_ROLES.length} default roles.`);
+    console.log(`Seed: ensured ${DEFAULT_ROLE_NAMES.length} default roles.`);
+
+    // Runs unconditionally (not skipped by the admin-already-exists early
+    // return below) — additive/idempotent, per 11-role-permissions.md, so
+    // re-running it on an existing install safely picks up any new catalog
+    // entries or restores a default role's baseline permissions without ever
+    // stripping an Administrator's later customization. Uses the app's own
+    // Prisma singleton (src/lib/prisma.ts), not this script's local client —
+    // disconnected separately in the finally block below.
+    await permissionService.seedDefaults();
+    console.log("Seed: ensured the permission catalog and default role permissions.");
 
     const existingAdmin = await prisma.user.findUnique({ where: { username: "admin" } });
     if (existingAdmin) {
@@ -84,6 +87,7 @@ async function main(): Promise<void> {
     );
   } finally {
     await prisma.$disconnect();
+    await sharedPrisma.$disconnect();
   }
 }
 

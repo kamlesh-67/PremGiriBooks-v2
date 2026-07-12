@@ -74,6 +74,15 @@ export const userService = {
     if (!role) {
       throw new Error("Selected role does not exist.");
     }
+    // roleRepository.findById() is unfiltered by design (it also backs the
+    // Edit page's "keep the user's own already-inactive role" case below),
+    // so a brand-new assignment must be rejected here explicitly — the Role
+    // Select only omits inactive roles client-side, per
+    // 11-role-permissions.md ("removes it from the selectable list ... going
+    // forward"), which is a UI convenience, not a server-side guarantee.
+    if (!role.isActive) {
+      throw new Error("Selected role is inactive and cannot be assigned.");
+    }
 
     const profile = normalizeUserProfileInput(data);
     const passwordHash = await hashPassword(data.password);
@@ -92,6 +101,17 @@ export const userService = {
     const role = await roleRepository.findById(data.roleId);
     if (!role) {
       throw new Error("Selected role does not exist.");
+    }
+
+    // Allow a no-op resubmission of the user's own already-inactive role
+    // (the Edit page merges it back into the Select for exactly this case),
+    // but reject switching a *different* user onto an inactive role — see
+    // the identical comment in createUser above.
+    if (!role.isActive) {
+      const existingUser = await userRepository.findById(id);
+      if (existingUser?.roleId !== data.roleId) {
+        throw new Error("Selected role is inactive and cannot be assigned.");
+      }
     }
 
     const profile = normalizeUserProfileInput(data);
