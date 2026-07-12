@@ -12,7 +12,12 @@ import {
   updateUserSchema,
   type UserFormInput,
 } from "@/modules/users/validation/user-schema";
-import type { UpdateUserResult, UserListFilters, UserWithRole } from "@/types/user";
+import type {
+  CreateUserResult,
+  UpdateUserResult,
+  UserListFilters,
+  UserWithRole,
+} from "@/types/user";
 
 async function requireAdministrator(): Promise<CurrentUser> {
   const currentUser = await getCurrentUser();
@@ -70,27 +75,28 @@ export const userService = {
     const currentUser = await requireAdministrator();
     const data = createUserSchema.parse(input);
 
-    const role = await roleRepository.findById(data.roleId);
-    if (!role) {
-      throw new Error("Selected role does not exist.");
-    }
-    // roleRepository.findById() is unfiltered by design (it also backs the
-    // Edit page's "keep the user's own already-inactive role" case below),
-    // so a brand-new assignment must be rejected here explicitly — the Role
-    // Select only omits inactive roles client-side, per
-    // 11-role-permissions.md ("removes it from the selectable list ... going
-    // forward"), which is a UI convenience, not a server-side guarantee.
-    if (!role.isActive) {
-      throw new Error("Selected role is inactive and cannot be assigned.");
-    }
-
     const profile = normalizeUserProfileInput(data);
     const passwordHash = await hashPassword(data.password);
 
+    // The role's existence and active status are checked inside
+    // userRepository.create()'s own transaction, not here beforehand — a
+    // separate pre-write read here would leave a TOCTOU window where the
+    // role could be deactivated by another request between the check and
+    // the write. See that method's comment for the full reasoning.
+    let result: CreateUserResult;
     try {
-      return await userRepository.create(currentUser.companyId, profile, passwordHash);
+      result = await userRepository.create(currentUser.companyId, profile, passwordHash);
     } catch (error) {
       translateUserPersistError(error);
+    }
+
+    switch (result.status) {
+      case "invalid_role":
+        throw new Error("Selected role does not exist.");
+      case "inactive_role":
+        throw new Error("Selected role is inactive and cannot be assigned.");
+      case "ok":
+        return result.user;
     }
   },
 
@@ -98,25 +104,12 @@ export const userService = {
     const currentUser = await requireAdministrator();
     const data = updateUserSchema.parse(input);
 
-    const role = await roleRepository.findById(data.roleId);
-    if (!role) {
-      throw new Error("Selected role does not exist.");
-    }
-
-    // Allow a no-op resubmission of the user's own already-inactive role
-    // (the Edit page merges it back into the Select for exactly this case),
-    // but reject switching a *different* user onto an inactive role — see
-    // the identical comment in createUser above.
-    if (!role.isActive) {
-      const existingUser = await userRepository.findById(id);
-      if (existingUser?.roleId !== data.roleId) {
-        throw new Error("Selected role is inactive and cannot be assigned.");
-      }
-    }
-
     const profile = normalizeUserProfileInput(data);
     const passwordHash = data.password ? await hashPassword(data.password) : undefined;
 
+    // Same reasoning as createUser above — the role check (only performed
+    // when the role is actually changing) lives inside
+    // userRepository.updateProfile()'s own transaction.
     let result: UpdateUserResult;
     try {
       result = await userRepository.updateProfile(id, currentUser.companyId, profile, passwordHash);
@@ -127,6 +120,10 @@ export const userService = {
     switch (result.status) {
       case "not_found":
         throw new Error("User not found.");
+      case "invalid_role":
+        throw new Error("Selected role does not exist.");
+      case "inactive_role":
+        throw new Error("Selected role is inactive and cannot be assigned.");
       case "last_administrator":
         throw new Error("At least one active Administrator must remain for this company.");
       case "ok":

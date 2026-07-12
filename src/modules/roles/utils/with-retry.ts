@@ -1,4 +1,9 @@
 const MAX_TRANSACTION_RETRIES = 3;
+const BASE_RETRY_DELAY_MS = 20;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * Shared by role-repository.ts and permission-repository.ts — both wrap a
@@ -7,6 +12,10 @@ const MAX_TRANSACTION_RETRIES = 3;
  * financial-year/user modules' identical withRetry pattern for their own
  * count-then-write invariants). Kept as one helper here, unlike those
  * modules, since both call sites live in this same module.
+ *
+ * Waits a small, jittered, linearly-increasing delay between retries (only
+ * when another attempt remains) so two conflicting transactions don't
+ * immediately collide again on their very next attempt.
  */
 export async function withRetry<T>(
   operation: () => Promise<T>,
@@ -23,6 +32,7 @@ export async function withRetry<T>(
         }
         throw error;
       }
+      await delay(BASE_RETRY_DELAY_MS * attempt + Math.random() * BASE_RETRY_DELAY_MS);
     }
   }
 

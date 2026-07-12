@@ -62,6 +62,7 @@ export async function activateRoleAction(id: string): Promise<ActionResult<Role>
   }
 
   revalidatePath("/settings/roles");
+  revalidatePath(`/settings/roles/${id}/edit`);
   return { success: true, data: role };
 }
 
@@ -74,5 +75,6 @@ export async function deactivateRoleAction(id: string): Promise<ActionResult<Rol
   }
 
   revalidatePath("/settings/roles");
+  revalidatePath(`/settings/roles/${id}/edit`);
   return { success: true, data: role };
 }

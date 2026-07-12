@@ -59,6 +59,7 @@ Implement
 - Create Branch
 - Edit Branch
 - View Branch
+- Activate Branch
 - Deactivate Branch
 - Branch Selection screen
 
@@ -88,7 +89,7 @@ Do not add a `Session.branchId`-style "current branch" flag on the `Branch` mode
 # Business Rules
 
 - A branch's `branchCode` must be unique within its company (already enforced by the schema's `@@unique([companyId, branchCode])`).
-- Only Administrator users may Create, Edit, or Deactivate branches.
+- Only Administrator users may Create, Edit, Activate, or Deactivate branches.
 - **Branch Management is company-scoped for every Administrator, not "Administrator sees everything across companies."** Per the Architecture Decision recorded in `progress-tracker.md` from `11-role-permissions.md`: any module managing an entity that (a) belongs to exactly one company and (b) isn't the Company/tenant-boundary entity itself should default to the company-scoped-for-everyone model `10-user-management.md` established, not the Company/Financial-Year "Administrator sees all" model. A `Branch` belongs to exactly one company and is not the tenant boundary, so an Administrator must only be able to list, read, edit, activate, or deactivate branches belonging to their own company — treat "belongs to a different company" identically to "not found," exactly as `user-service.ts` does. Derive the active company server-side from the requesting Administrator's own session; never accept it as a client-supplied parameter.
 - Branch Selection (picking which branch to work in) is available to **any** authenticated user, not Administrator-only — this mirrors Company Selection and Financial Year Selection, which are both accessible to every logged-in user, not just admins.
 - A branch must belong to the currently active company; selecting a branch belonging to a different company must be rejected.
@@ -184,7 +185,7 @@ src/lib/current-branch.ts
 
 Mirror `current-company.ts`'s read/write split exactly:
 
-- `getCurrentBranchId`/`getCurrentBranch` — read-only, `cache()`-wrapped, safe to call from any Server Component. Validates the resolved branch belongs to the active company (via `getCurrentCompany()`), the same way `getCurrentFinancialYear()` validates against the active company. Resolves to `null` on any mismatch or when no branch is selected — never throws for "no branch," since that is a normal state (see Branch Selection above).
+- `getCurrentBranchId`/`getCurrentBranch` — read-only, `cache()`-wrapped, safe to call from any Server Component. Validates the resolved branch belongs to the active company (via `getCurrentCompany()`) **and is active**, the same way `getCurrentFinancialYear()` validates against the active company and checks `isClosed`. A branch selected earlier in the session that has since been deactivated must resolve to `null`, not to a stale, no-longer-selectable branch — mirroring Financial Year's identical "the active context must never keep pointing at something that's no longer eligible" rule. Resolves to `null` on any mismatch, on an inactive branch, or when no branch is selected — never throws for any of these, since "no branch" is a normal state (see Branch Selection above).
 - `setCurrentBranch`/`clearCurrentBranch` — write a separate httpOnly cookie (add `ACTIVE_BRANCH_ID` to `src/constants/cookie-keys.ts`); only callable from inside a Server Action, never during Server Component render, per this project's established Next.js 16 cookie-write rule.
 - Add a `BranchProvider` (`src/components/providers/branch-provider.tsx`) mirroring `CompanyProvider`/`FinancialYearProvider` exactly, nested inside them in `src/app/layout.tsx`. Wire `StatusBar`'s existing "Branch" field (currently a static `"—"` placeholder) to `useBranch()`.
 
@@ -208,7 +209,7 @@ The Sidebar's "Masters" entry is unchanged (already links to `/masters`).
 
 Only Administrator users may
 
-- Create, Edit, Deactivate branches
+- Create, Edit, Activate, Deactivate branches
 
 Any authenticated user may
 

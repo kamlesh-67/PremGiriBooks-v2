@@ -1,3 +1,5 @@
+import { DEFAULT_ROLE_NAMES } from "@/constants/roles";
+
 // Modules match the sidebar sections in ui-context.md (Dashboard, Masters,
 // Sales, Purchase, Inventory, Accounting, GST, Reports, Employees, Settings)
 // plus the finer-grained modules already built (company, financial-year,
@@ -29,6 +31,15 @@ interface PermissionPairSeed {
   action: PermissionAction;
 }
 
+// Every non-Administrator default role name must have an entry below — a
+// Record keyed by this type (rather than a bare `string`) fails to compile
+// if a key is misspelled or a role is added/removed from DEFAULT_ROLE_NAMES
+// without updating this map.
+type NonAdministratorDefaultRoleName = Exclude<
+  (typeof DEFAULT_ROLE_NAMES)[number],
+  "Administrator"
+>;
+
 /**
  * Forward-declarative seed values for the five non-Administrator default
  * roles from 07-authentication.md, per 11-role-permissions.md: "the modules
@@ -37,7 +48,7 @@ interface PermissionPairSeed {
  * handled separately in permission-service.ts (always every module/action)
  * rather than listed here, so it can never drift from the live catalog.
  */
-export const DEFAULT_ROLE_PERMISSIONS: Record<string, PermissionPairSeed[]> = {
+export const DEFAULT_ROLE_PERMISSIONS: Record<NonAdministratorDefaultRoleName, PermissionPairSeed[]> = {
   Accountant: [
     { module: "dashboard", action: "view" },
     { module: "financial-year", action: "view" },

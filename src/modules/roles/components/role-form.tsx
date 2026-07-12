@@ -53,6 +53,8 @@ export function RoleForm({ mode, defaultValues, onSubmit, submitLabel }: RoleFor
         router.push(`/settings/roles/${result.data.id}/edit`);
       }
       router.refresh();
+    } catch {
+      toast.error("Failed to save role. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

@@ -17,4 +17,11 @@ export type DeactivateUserResult =
 export type UpdateUserResult =
   | { status: "ok"; user: UserWithRole }
   | { status: "not_found" }
+  | { status: "invalid_role" }
+  | { status: "inactive_role" }
   | { status: "last_administrator" };
+
+export type CreateUserResult =
+  | { status: "ok"; user: UserWithRole }
+  | { status: "invalid_role" }
+  | { status: "inactive_role" };

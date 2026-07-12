@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import type { UserProfileFields } from "@/modules/users/utils/normalize-user-input";
 import { isRetryableTransactionError } from "@/modules/users/utils/prisma-errors";
 import type {
+  CreateUserResult,
   DeactivateUserResult,
   UpdateUserResult,
   UserListFilters,
@@ -77,16 +78,38 @@ export const userRepository = {
     });
   },
 
+  /**
+   * Checks the selected role's existence and active status inside the same
+   * Serializable transaction as the insert, closing the TOCTOU window a
+   * separate pre-write check in the service layer left open: without this,
+   * a role could be deactivated by another request in the gap between
+   * userService.createUser's check and this write, letting a brand-new user
+   * end up assigned to an inactive role despite the check having passed.
+   */
   create(
     companyId: string,
     profile: UserProfileFields,
     passwordHash: string
-  ): Promise<UserWithRole> {
-    return prisma.user.create({
-      data: { ...profile, passwordHash, companyId },
-      include: SAFE_INCLUDE,
-      omit: SAFE_OMIT,
-    });
+  ): Promise<CreateUserResult> {
+    return withRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const role = await tx.role.findUnique({ where: { id: profile.roleId } });
+        if (!role) {
+          return { status: "invalid_role" };
+        }
+        if (!role.isActive) {
+          return { status: "inactive_role" };
+        }
+
+        const user = await tx.user.create({
+          data: { ...profile, passwordHash, companyId },
+          include: SAFE_INCLUDE,
+          omit: SAFE_OMIT,
+        });
+
+        return { status: "ok", user };
+      }, SERIALIZABLE)
+    );
   },
 
   /**
@@ -116,6 +139,23 @@ export const userRepository = {
         });
         if (!existing || existing.companyId !== companyId) {
           return { status: "not_found" };
+        }
+
+        // Only checked when the role is actually changing — a no-op
+        // resubmission of the user's own already-inactive role (the Edit
+        // page merges it back into the Select for exactly this case) must
+        // keep working, per 11-role-permissions.md's "existing users keep
+        // functioning under a deactivated role" rule. Checked inside this
+        // same Serializable transaction, not a separate pre-write read, to
+        // close the identical TOCTOU window documented on create() above.
+        if (profile.roleId !== existing.roleId) {
+          const newRole = await tx.role.findUnique({ where: { id: profile.roleId } });
+          if (!newRole) {
+            return { status: "invalid_role" };
+          }
+          if (!newRole.isActive) {
+            return { status: "inactive_role" };
+          }
         }
 
         const losesAdministratorRole =

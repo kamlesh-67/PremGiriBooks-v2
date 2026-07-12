@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { prisma } from "@/lib/prisma";
 import { AuthorizationError, type CurrentUser } from "@/lib/current-user";
 
@@ -10,26 +12,32 @@ import { AuthorizationError, type CurrentUser } from "@/lib/current-user";
  * doing so would silently revoke a still-assigned user's access the moment
  * an Administrator hides the role from future selection, which is a
  * different, stronger action than the spec describes.
+ *
+ * cache()-wrapped so multiple permission checks for the same
+ * (user, module, action) within one request/render pass — e.g. a page
+ * checking the same permission from a Server Component and a nested one —
+ * dedupe to a single query, mirroring current-user.ts's identical use of
+ * cache() for getCurrentUser(). Relies on `user` being the same object
+ * reference across those calls, which holds here since getCurrentUser()
+ * is itself cache()-wrapped per request.
  */
-export async function hasPermission(
-  user: CurrentUser,
-  module: string,
-  action: string
-): Promise<boolean> {
-  if (!module || !action) {
-    return false;
+export const hasPermission = cache(
+  async (user: CurrentUser, module: string, action: string): Promise<boolean> => {
+    if (!module || !action) {
+      return false;
+    }
+
+    const match = await prisma.rolePermission.findFirst({
+      where: {
+        role: { name: user.role },
+        permission: { module, action },
+      },
+      select: { id: true },
+    });
+
+    return match !== null;
   }
-
-  const match = await prisma.rolePermission.findFirst({
-    where: {
-      role: { name: user.role },
-      permission: { module, action },
-    },
-    select: { id: true },
-  });
-
-  return match !== null;
-}
+);
 
 export async function assertPermission(
   user: CurrentUser,

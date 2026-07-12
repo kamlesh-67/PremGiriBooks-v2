@@ -50,11 +50,15 @@ function registerBackForwardNavigation(window: BrowserWindow): void {
     }
   });
 
-  window.webContents.on("before-input-event", (_event, input) => {
+  window.webContents.on("before-input-event", (event, input) => {
     const isArrowKey = input.key === "Left" || input.key === "Right";
     if (input.type !== "keyDown" || !isArrowKey || !input.alt) {
       return;
     }
+
+    // Prevent Chromium's/the page's own default handling of Alt+Arrow
+    // before triggering our own navigation, so the two can never both fire.
+    event.preventDefault();
 
     if (input.key === "Left" && window.webContents.navigationHistory.canGoBack()) {
       window.webContents.navigationHistory.goBack();
