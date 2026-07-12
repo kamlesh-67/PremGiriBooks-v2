@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { hashPassword, verifyPassword } from "@/lib/password";
+import { verifyPassword } from "@/lib/password";
 import { createSession, deleteSession } from "@/lib/session";
 
 export class InvalidCredentialsError extends Error {
@@ -15,17 +15,16 @@ export interface LoginResult {
   expiresAt: Date;
 }
 
-// A fixed, lazily-computed hash verified against when the username doesn't
-// exist, so an unknown-username attempt costs the same Argon2 verify time as
-// a known-username-wrong-password attempt — otherwise the two are
+// A fixed, pre-generated hash (of a throwaway string, never a real
+// credential) verified against when the username doesn't exist, so an
+// unknown-username attempt costs exactly the same single Argon2 verify as a
+// known-username-wrong-password attempt — otherwise the two are
 // distinguishable by response time alone, which lets an attacker enumerate
-// valid usernames without ever seeing a different error message.
-let dummyPasswordHashPromise: Promise<string> | null = null;
-
-function getDummyPasswordHash(): Promise<string> {
-  dummyPasswordHashPromise ??= hashPassword("dummy-password-for-timing-safety");
-  return dummyPasswordHashPromise;
-}
+// valid usernames without ever seeing a different error message. Pre-
+// generated rather than hashed on first use so there's no cold-start request
+// that pays for both a hash *and* a verify.
+const DUMMY_PASSWORD_HASH =
+  "$argon2id$v=19$m=65536,t=3,p=4$fQxwarYoF2hXycO0esIuYQ$2lWnO8nfFtgq4LQJhgiRBwhEK5hvft/16gfSzjgMS8A";
 
 export async function login(
   username: string,
@@ -33,7 +32,7 @@ export async function login(
   rememberMe: boolean
 ): Promise<LoginResult> {
   const user = await prisma.user.findUnique({ where: { username } });
-  const passwordHash = user?.passwordHash ?? (await getDummyPasswordHash());
+  const passwordHash = user?.passwordHash ?? DUMMY_PASSWORD_HASH;
   const passwordValid = await verifyPassword(passwordHash, plainPassword);
 
   // Every failure below throws the same InvalidCredentialsError — an unknown
