@@ -4,14 +4,14 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
-import { InvalidCredentialsError, UserDisabledError, login, logout } from "@/lib/auth";
+import { InvalidCredentialsError, login, logout } from "@/lib/auth";
 import { clearCurrentCompany } from "@/lib/current-company";
 import { clearCurrentFinancialYear } from "@/lib/current-financial-year";
 import { loginSchema, type LoginInput } from "@/lib/auth-schema";
 import type { ActionResult } from "@/types/api";
 
 function toErrorMessage(error: unknown): string {
-  if (error instanceof InvalidCredentialsError || error instanceof UserDisabledError) {
+  if (error instanceof InvalidCredentialsError) {
     return error.message;
   }
 

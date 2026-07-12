@@ -59,6 +59,25 @@ export async function getCurrentUser(): Promise<CurrentUser> {
   return user;
 }
 
+/**
+ * Runs `resolve` and fails closed (returns null) if it throws
+ * AuthenticationError — the shared pattern `getCurrentCompany()` and
+ * `getCurrentFinancialYear()` use so a stale selection cookie outliving its
+ * session resolves to "nothing selected" instead of crashing RootLayout
+ * (which renders for every page, including the public /login page). Any
+ * other error still propagates.
+ */
+export async function resolveFailingClosed<T>(resolve: () => Promise<T>): Promise<T | null> {
+  try {
+    return await resolve();
+  } catch (error) {
+    if (error instanceof AuthenticationError) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 export async function getCurrentUserRole(): Promise<string> {
   const user = await getCurrentUser();
   return user.role;

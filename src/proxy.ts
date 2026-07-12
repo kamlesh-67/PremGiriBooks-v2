@@ -43,7 +43,17 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  const expiresAt = await renewSession(session.session.id, session.session.rememberMe);
+  let expiresAt: Date | null;
+  try {
+    expiresAt = await renewSession(session.session.id, session.session.rememberMe);
+  } catch {
+    // Renewal failed for a reason other than "session not found" (e.g. a
+    // transient DB error) — the session was already validated above and is
+    // still within its existing expiry, so don't force a logout over an
+    // infra hiccup. Just continue without extending it this round.
+    return NextResponse.next();
+  }
+
   if (!expiresAt) {
     // Session was concurrently deleted (e.g. logged out from another tab)
     // between the read above and this renewal — treat it as unauthenticated.

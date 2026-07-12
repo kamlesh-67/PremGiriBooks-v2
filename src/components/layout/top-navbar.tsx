@@ -1,6 +1,7 @@
 "use client";
 
 import { BookOpen, Search, Bell, User, LogOut } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,14 @@ import {
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { useAuth } from "@/components/providers/auth-provider";
 import { logoutAction } from "@/lib/auth-actions";
+
+async function handleLogout() {
+  try {
+    await logoutAction();
+  } catch {
+    toast.error("Failed to log out. Please try again.");
+  }
+}
 
 export function TopNavbar() {
   const { user } = useAuth();
@@ -67,7 +76,7 @@ export function TopNavbar() {
                 <DropdownMenuSeparator />
               </>
             )}
-            <DropdownMenuItem onClick={() => logoutAction()}>
+            <DropdownMenuItem onClick={() => void handleLogout()}>
               <LogOut size={16} />
               Logout
             </DropdownMenuItem>

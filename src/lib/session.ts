@@ -71,6 +71,9 @@ export async function getSessionWithUser(token: string): Promise<SessionWithUser
   }
 
   if (!session.user.isActive) {
+    // A disabled account's sessions must not be resurrectable by later
+    // reactivating the account — delete now rather than leave it to expire.
+    await deleteSessionRow(session.id);
     return null;
   }
 
@@ -88,9 +91,11 @@ export async function getSessionWithUser(token: string): Promise<SessionWithUser
 }
 
 /**
- * Returns null if the session was concurrently deleted (e.g. logged out from
- * another tab) between the caller's read and this renewal — callers must
- * treat that the same as "no valid session," not crash.
+ * Returns null only if the session was genuinely gone (e.g. concurrently
+ * deleted by a logout in another tab) — callers must treat that the same as
+ * "no valid session." Any other failure (a transient DB error) is rethrown
+ * rather than treated as "log the user out," since the session the caller
+ * already validated is still good; it just couldn't be renewed this time.
  */
 export async function renewSession(token: string, rememberMe: boolean): Promise<Date | null> {
   const expiresAt = new Date(Date.now() + sessionDuration(rememberMe));
@@ -101,10 +106,11 @@ export async function renewSession(token: string, rememberMe: boolean): Promise<
     });
     return expiresAt;
   } catch (error) {
-    if (!isNotFoundError(error)) {
-      logger.warn({ event: "session_renew_failed" }, "Failed to renew session");
+    if (isNotFoundError(error)) {
+      return null;
     }
-    return null;
+    logger.warn({ event: "session_renew_failed" }, "Failed to renew session");
+    throw error;
   }
 }
 

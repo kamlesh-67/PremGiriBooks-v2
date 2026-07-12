@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
 import { getCurrentCompanyId } from "@/lib/current-company";
-import { AuthenticationError } from "@/lib/current-user";
+import { resolveFailingClosed } from "@/lib/current-user";
 import { financialYearService } from "@/modules/financial-year/services/financial-year-service";
 import type { FinancialYear } from "@/types/financial-year";
 
@@ -29,15 +29,9 @@ export const getCurrentFinancialYear = cache(async (): Promise<FinancialYear | n
   // calls this for every page, including the public /login page, so a stale
   // active_financial_year_id cookie outliving its session must resolve to
   // null rather than throw AuthenticationError.
-  let financialYear: FinancialYear | null;
-  try {
-    financialYear = await financialYearService.getFinancialYear(financialYearId);
-  } catch (error) {
-    if (error instanceof AuthenticationError) {
-      return null;
-    }
-    throw error;
-  }
+  const financialYear = await resolveFailingClosed(() =>
+    financialYearService.getFinancialYear(financialYearId)
+  );
 
   if (!financialYear || financialYear.companyId !== companyId || financialYear.isClosed) {
     return null;

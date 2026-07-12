@@ -1,7 +1,7 @@
 import "dotenv/config";
-import argon2 from "argon2";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { hashPassword } from "../src/lib/password";
 
 // Default roles per 07-authentication.md — "Do not implement custom roles yet."
 const DEFAULT_ROLES = [
@@ -15,8 +15,8 @@ const DEFAULT_ROLES = [
 
 // 07-authentication.md explicitly excludes a registration screen, so the very
 // first Administrator must be bootstrapped here. This default password is a
-// local-development convenience only — override it via SEED_ADMIN_PASSWORD in
-// any shared or production environment.
+// local-development convenience only — production-like environments must set
+// SEED_ADMIN_PASSWORD explicitly (enforced below) rather than relying on it.
 const DEFAULT_SEED_ADMIN_PASSWORD = "Admin@12345";
 
 async function main(): Promise<void> {
@@ -25,6 +25,7 @@ async function main(): Promise<void> {
     throw new Error("DATABASE_URL is not set");
   }
 
+  const seedAdminPassword = process.env["SEED_ADMIN_PASSWORD"];
   const adapter = new PrismaPg(databaseUrl);
   const prisma = new PrismaClient({ adapter });
 
@@ -40,35 +41,46 @@ async function main(): Promise<void> {
       return;
     }
 
+    if (process.env["NODE_ENV"] === "production" && !seedAdminPassword) {
+      throw new Error(
+        "SEED_ADMIN_PASSWORD must be set before bootstrapping the admin user in a production environment — refusing to fall back to a default password."
+      );
+    }
+
     const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: "Administrator" } });
+    const passwordHash = await hashPassword(seedAdminPassword ?? DEFAULT_SEED_ADMIN_PASSWORD);
 
-    const company = await prisma.company.create({
-      data: {
-        companyName: "Default Company",
-        legalName: "Default Company",
-        settings: { create: {} },
-      },
-    });
+    // Wrapped in a transaction so a failure partway through (e.g. the user
+    // insert failing after the company insert succeeds) can't leave an
+    // orphaned company with no admin user — and can't cause a duplicate
+    // "Default Company" to be created if the seed script is re-run after
+    // such a partial failure.
+    await prisma.$transaction(async (tx) => {
+      const company = await tx.company.create({
+        data: {
+          companyName: "Default Company",
+          legalName: "Default Company",
+          settings: { create: {} },
+        },
+      });
 
-    const seedPassword = process.env["SEED_ADMIN_PASSWORD"] ?? DEFAULT_SEED_ADMIN_PASSWORD;
-    const passwordHash = await argon2.hash(seedPassword);
-
-    await prisma.user.create({
-      data: {
-        username: "admin",
-        fullName: "Administrator",
-        email: "admin@premgiribooks.local",
-        passwordHash,
-        companyId: company.id,
-        roleId: adminRole.id,
-      },
+      await tx.user.create({
+        data: {
+          username: "admin",
+          fullName: "Administrator",
+          email: "admin@premgiribooks.local",
+          passwordHash,
+          companyId: company.id,
+          roleId: adminRole.id,
+        },
+      });
     });
 
     console.log('Seed: created bootstrap Administrator user "admin" and "Default Company".');
     console.log(
-      process.env["SEED_ADMIN_PASSWORD"]
-        ? "Seed: sign in with the username \"admin\" and the password from SEED_ADMIN_PASSWORD."
-        : `Seed: sign in with username "admin" and password "${DEFAULT_SEED_ADMIN_PASSWORD}". Set SEED_ADMIN_PASSWORD to override this default.`
+      seedAdminPassword
+        ? 'Seed: sign in with username "admin" using the password set via SEED_ADMIN_PASSWORD.'
+        : 'Seed: sign in with username "admin" using the local-development default password documented in prisma/seed.ts. Set SEED_ADMIN_PASSWORD to override it.'
     );
   } finally {
     await prisma.$disconnect();
