@@ -54,17 +54,20 @@ export function UserForm({ mode, roles, defaultValues, onSubmit, submitLabel }: 
 
   async function handleSubmit(data: UserFormInput) {
     setIsSubmitting(true);
-    const result = await onSubmit(data);
-    setIsSubmitting(false);
+    try {
+      const result = await onSubmit(data);
 
-    if (result.success) {
-      toast.success("User saved successfully.");
-      router.push("/settings/users");
-      router.refresh();
-      return;
+      if (result.success) {
+        toast.success("User saved successfully.");
+        router.push("/settings/users");
+        router.refresh();
+        return;
+      }
+
+      toast.error(result.error ?? "Failed to save user.");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    toast.error(result.error ?? "Failed to save user.");
   }
 
   return (
@@ -78,7 +81,7 @@ export function UserForm({ mode, roles, defaultValues, onSubmit, submitLabel }: 
               <FormItem>
                 <FormLabel>Username *</FormLabel>
                 <FormControl>
-                  <Input {...field} autoComplete="username" />
+                  <Input {...field} autoComplete="username" disabled={isSubmitting} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -91,7 +94,7 @@ export function UserForm({ mode, roles, defaultValues, onSubmit, submitLabel }: 
               <FormItem>
                 <FormLabel>Full Name *</FormLabel>
                 <FormControl>
-                  <Input {...field} />
+                  <Input {...field} disabled={isSubmitting} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -104,7 +107,7 @@ export function UserForm({ mode, roles, defaultValues, onSubmit, submitLabel }: 
               <FormItem>
                 <FormLabel>Email *</FormLabel>
                 <FormControl>
-                  <Input {...field} type="email" autoComplete="email" />
+                  <Input {...field} type="email" autoComplete="email" disabled={isSubmitting} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -117,7 +120,12 @@ export function UserForm({ mode, roles, defaultValues, onSubmit, submitLabel }: 
               <FormItem>
                 <FormLabel>Mobile</FormLabel>
                 <FormControl>
-                  <Input {...field} value={field.value ?? ""} autoComplete="tel" />
+                  <Input
+                    {...field}
+                    value={field.value ?? ""}
+                    autoComplete="tel"
+                    disabled={isSubmitting}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -137,6 +145,7 @@ export function UserForm({ mode, roles, defaultValues, onSubmit, submitLabel }: 
                     placeholder={
                       mode === "edit" ? "Leave blank to keep the current password" : undefined
                     }
+                    disabled={isSubmitting}
                   />
                 </FormControl>
                 <FormMessage />
@@ -150,7 +159,12 @@ export function UserForm({ mode, roles, defaultValues, onSubmit, submitLabel }: 
               <FormItem>
                 <FormLabel>Role *</FormLabel>
                 <FormControl>
-                  <RoleSelect roles={roles} value={field.value} onChange={field.onChange} />
+                  <RoleSelect
+                    roles={roles}
+                    value={field.value}
+                    onChange={field.onChange}
+                    disabled={isSubmitting}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>

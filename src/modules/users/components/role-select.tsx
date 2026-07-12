@@ -15,16 +15,33 @@ interface RoleSelectProps {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
 }
 
-export function RoleSelect({ roles, value, onChange, disabled }: RoleSelectProps) {
+export function RoleSelect({
+  roles,
+  value,
+  onChange,
+  disabled,
+  id,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
+}: RoleSelectProps) {
   return (
     <Select
+      items={roles.map((role) => ({ value: role.id, label: role.name }))}
       value={value === "" ? null : value}
       onValueChange={(nextValue) => onChange(nextValue ?? "")}
       disabled={disabled}
     >
-      <SelectTrigger className="w-full">
+      <SelectTrigger
+        id={id}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
+        className="w-full"
+      >
         <SelectValue placeholder="Select a role" />
       </SelectTrigger>
       <SelectContent>

@@ -14,6 +14,16 @@ interface UserSearchFormProps {
 export function UserSearchForm({ initialSearch }: UserSearchFormProps) {
   const router = useRouter();
   const [search, setSearch] = React.useState(initialSearch);
+  // Adjusted during render (not in an effect, per this project's
+  // react-hooks/set-state-in-effect rule) so the input reflects a new
+  // `initialSearch` after URL-driven navigation (e.g. back/forward) without
+  // remounting — React's documented "adjusting state when a prop changes"
+  // pattern: https://react.dev/learn/you-might-not-need-an-effect
+  const [prevInitialSearch, setPrevInitialSearch] = React.useState(initialSearch);
+  if (initialSearch !== prevInitialSearch) {
+    setPrevInitialSearch(initialSearch);
+    setSearch(initialSearch);
+  }
 
   function applyFilters(nextSearch: string) {
     const params = new URLSearchParams();

@@ -8,7 +8,7 @@ Analyzed and resolved (2026-07-12).
 
 ## Raw Error
 
-```
+```text
 Runtime Error
 
 Base UI: MenuGroupContext is missing. Menu group parts must be used within <Menu.Group> or <Menu.RadioGroup>.

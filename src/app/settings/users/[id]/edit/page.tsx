@@ -17,12 +17,10 @@ export default async function EditUserPage({ params }: EditUserPageProps) {
   }
 
   const { id } = await params;
-  const user = await userService.getUser(id);
+  const [user, roles] = await Promise.all([userService.getUser(id), userService.listRoles()]);
   if (!user) {
     notFound();
   }
-
-  const roles = await userService.listRoles();
 
   return (
     <AppShell isAdmin={isAdmin}>

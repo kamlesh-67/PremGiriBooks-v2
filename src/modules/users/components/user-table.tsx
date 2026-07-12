@@ -31,16 +31,21 @@ export function UserTable({ users, currentUserId }: UserTableProps) {
 
   async function handleToggleActive(user: UserWithRole) {
     setPendingId(user.id);
-    const action = user.isActive ? deactivateUserAction : activateUserAction;
-    const result = await action(user.id);
-    setPendingId(null);
+    try {
+      const action = user.isActive ? deactivateUserAction : activateUserAction;
+      const result = await action(user.id);
 
-    if (!result.success) {
-      toast.error(result.error ?? "Failed to update user status.");
-      return;
+      if (!result.success) {
+        toast.error(result.error ?? "Failed to update user status.");
+        return;
+      }
+
+      toast.success(user.isActive ? "User deactivated." : "User activated.");
+    } catch {
+      toast.error("Failed to update user status. Please try again.");
+    } finally {
+      setPendingId(null);
     }
-
-    toast.success(user.isActive ? "User deactivated." : "User activated.");
   }
 
   if (users.length === 0) {

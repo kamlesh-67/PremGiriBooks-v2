@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MOBILE_REGEX = /^[6-9]\d{9}$/;
 const PASSWORD_COMPLEXITY_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).*$/;
 const PASSWORD_MIN_LENGTH = 8;
@@ -32,12 +31,18 @@ export const updateUserSchema = z.object({
     .trim()
     .min(2, "Full name must be at least 2 characters")
     .max(100, "Full name is too long"),
+  // .trim()/.min()/.max() must run before .pipe(z.email(...)) — z.email()
+  // validates the value handed to it as-is, so chaining .trim() after it
+  // (e.g. z.email().trim()) would reject a legitimately valid email that
+  // merely has surrounding whitespace, since the format check would run
+  // before the trim. Verified directly against this project's installed
+  // zod version (4.4.3).
   email: z
     .string()
     .trim()
     .min(1, "Email is required")
     .max(150, "Email is too long")
-    .refine((value) => EMAIL_REGEX.test(value), { message: "Enter a valid email address" }),
+    .pipe(z.email("Enter a valid email address")),
   mobile: optionalPattern(MOBILE_REGEX, "Enter a valid 10-digit mobile number"),
   password: z
     .string()
