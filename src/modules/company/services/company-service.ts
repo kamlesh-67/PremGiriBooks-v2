@@ -1,8 +1,10 @@
 import { AppError } from "@/lib/app-error";
 import { assertAdministrator, getCurrentUser } from "@/lib/current-user";
+import { prisma } from "@/lib/prisma";
 import { companyRepository } from "@/modules/company/repositories/company-repository";
 import { normalizeCompanyInput } from "@/modules/company/utils/normalize-company-input";
 import { companySchema, type CompanyInput } from "@/modules/company/validation/company-schema";
+import { ledgerGroupService } from "@/modules/ledger-groups/services/ledger-group-service";
 import type { CompanyListFilters, CompanyWithSettings } from "@/types/company";
 
 export const companyService = {
@@ -41,10 +43,19 @@ export const companyService = {
     return companyRepository.findById(id);
   },
 
+  // Seeds the default ledger group skeleton in the same transaction as the
+  // Company row, per 13-ledger-groups.md: a company must never exist with an
+  // incomplete chart of accounts, so a seeding failure rolls the whole
+  // company creation back with it.
   async createCompany(input: CompanyInput): Promise<CompanyWithSettings> {
     await assertAdministrator();
     const data = normalizeCompanyInput(companySchema.parse(input));
-    return companyRepository.create(data);
+
+    return prisma.$transaction(async (tx) => {
+      const company = await companyRepository.create(data, tx);
+      await ledgerGroupService.seedDefaultGroups(company.id, tx);
+      return company;
+    });
   },
 
   async updateCompany(id: string, input: CompanyInput): Promise<CompanyWithSettings> {
