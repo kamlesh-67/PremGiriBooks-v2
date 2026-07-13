@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import type { UserProfileFields } from "@/modules/users/utils/normalize-user-input";
 import { isRetryableTransactionError } from "@/modules/users/utils/prisma-errors";
@@ -23,18 +24,32 @@ const CONFLICT_MESSAGE = "This user was changed by another request. Please try a
  * alone only detects a write-skew conflict, it doesn't resolve it, so the
  * "last active Administrator" count-then-write in updateProfile/deactivate
  * needs a bounded retry the same way "only one current financial year" does.
+ *
+ * Logs each retry and, if retries are exhausted, logs that too before
+ * throwing CONFLICT_MESSAGE — otherwise repeated write-skew contention on
+ * this table would be invisible to anything but the end user's error toast.
  */
 async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
   for (let attempt = 1; attempt <= MAX_TRANSACTION_RETRIES; attempt += 1) {
     try {
       return await operation();
     } catch (error) {
-      if (!isRetryableTransactionError(error) || attempt === MAX_TRANSACTION_RETRIES) {
-        if (isRetryableTransactionError(error)) {
-          throw new Error(CONFLICT_MESSAGE);
-        }
+      if (!isRetryableTransactionError(error)) {
         throw error;
       }
+
+      if (attempt === MAX_TRANSACTION_RETRIES) {
+        logger.error(
+          { attempt, maxAttempts: MAX_TRANSACTION_RETRIES },
+          "User transaction retries exhausted after repeated write-skew conflicts"
+        );
+        throw new Error(CONFLICT_MESSAGE);
+      }
+
+      logger.warn(
+        { attempt, maxAttempts: MAX_TRANSACTION_RETRIES },
+        "Retrying user transaction after a write-skew conflict"
+      );
     }
   }
 
