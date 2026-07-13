@@ -19,3 +19,8 @@ export type DeactivateLedgerGroupResult =
   | { status: "system_defined" }
   | { status: "has_active_children" }
   | { status: "ok"; ledgerGroup: LedgerGroup };
+
+export type ActivateLedgerGroupResult =
+  | { status: "not_found" }
+  | { status: "parent_inactive" }
+  | { status: "ok"; ledgerGroup: LedgerGroup };

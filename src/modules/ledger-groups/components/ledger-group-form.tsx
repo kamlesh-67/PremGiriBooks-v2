@@ -57,6 +57,16 @@ export function LedgerGroupForm({ groups, onSubmit }: LedgerGroupFormProps) {
   const showAffectsGrossProfit =
     isTopLevel && (natureType === "INCOME" || natureType === "EXPENSE");
 
+  // Whenever the field becomes inapplicable (a parent is selected, or the
+  // nature changes to ASSET/LIABILITY/unset), clear its stale value — Zod's
+  // superRefine rejects a leftover `true` here, but the field wouldn't be
+  // mounted to show that error, producing a silent submit failure.
+  React.useEffect(() => {
+    if (!showAffectsGrossProfit) {
+      form.setValue("affectsGrossProfit", undefined, { shouldDirty: true });
+    }
+  }, [showAffectsGrossProfit, form]);
+
   async function handleSubmit(data: CreateLedgerGroupInput) {
     setIsSubmitting(true);
     const result = await onSubmit(data);

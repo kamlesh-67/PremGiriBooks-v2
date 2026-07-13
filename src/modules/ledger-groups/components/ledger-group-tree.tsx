@@ -17,9 +17,13 @@ import type { LedgerGroupNode } from "@/types/ledger-group";
 
 interface LedgerGroupTreeProps {
   nodes: LedgerGroupNode[];
+  /** Whether the viewer holds the "accounting":"edit" permission. */
+  canEdit?: boolean;
+  /** Whether the viewer holds the "accounting":"delete" permission (gates Activate/Deactivate). */
+  canManage?: boolean;
 }
 
-export function LedgerGroupTree({ nodes }: LedgerGroupTreeProps) {
+export function LedgerGroupTree({ nodes, canEdit = false, canManage = false }: LedgerGroupTreeProps) {
   if (nodes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-16 text-center">
@@ -31,7 +35,7 @@ export function LedgerGroupTree({ nodes }: LedgerGroupTreeProps) {
   return (
     <div className="flex flex-col gap-1 rounded-2xl border border-border p-2">
       {nodes.map((node) => (
-        <LedgerGroupTreeRow key={node.id} node={node} depth={0} />
+        <LedgerGroupTreeRow key={node.id} node={node} depth={0} canEdit={canEdit} canManage={canManage} />
       ))}
     </div>
   );
@@ -40,9 +44,11 @@ export function LedgerGroupTree({ nodes }: LedgerGroupTreeProps) {
 interface LedgerGroupTreeRowProps {
   node: LedgerGroupNode;
   depth: number;
+  canEdit: boolean;
+  canManage: boolean;
 }
 
-function LedgerGroupTreeRow({ node, depth }: LedgerGroupTreeRowProps) {
+function LedgerGroupTreeRow({ node, depth, canEdit, canManage }: LedgerGroupTreeRowProps) {
   const [expanded, setExpanded] = React.useState(true);
   const [isPending, setIsPending] = React.useState(false);
   const hasChildren = node.children.length > 0;
@@ -87,17 +93,19 @@ function LedgerGroupTreeRow({ node, depth }: LedgerGroupTreeRowProps) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            nativeButton={false}
-            render={
-              <Link href={`/accounting/ledger-groups/${node.id}/edit`} aria-label="Edit ledger group">
-                <Pencil size={16} />
-              </Link>
-            }
-          />
-          {node.isSystemDefined ? null : (
+          {canEdit ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              nativeButton={false}
+              render={
+                <Link href={`/accounting/ledger-groups/${node.id}/edit`} aria-label="Edit ledger group">
+                  <Pencil size={16} />
+                </Link>
+              }
+            />
+          ) : null}
+          {node.isSystemDefined || !canManage ? null : (
             <Button
               variant="outline"
               size="sm"
@@ -112,7 +120,13 @@ function LedgerGroupTreeRow({ node, depth }: LedgerGroupTreeRowProps) {
 
       {hasChildren && expanded
         ? node.children.map((child) => (
-            <LedgerGroupTreeRow key={child.id} node={child} depth={depth + 1} />
+            <LedgerGroupTreeRow
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              canEdit={canEdit}
+              canManage={canManage}
+            />
           ))
         : null}
     </div>

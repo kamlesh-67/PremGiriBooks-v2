@@ -82,6 +82,9 @@ export const ledgerGroupService = {
       if (!parent || parent.companyId !== user.companyId) {
         throw new AppError("Parent group not found.");
       }
+      if (!parent.isActive) {
+        throw new AppError("Cannot create a sub-group under an inactive parent group.");
+      }
       natureType = parent.natureType;
       affectsGrossProfit = parent.affectsGrossProfit;
     } else {
@@ -133,11 +136,15 @@ export const ledgerGroupService = {
     const user = await getCurrentUser();
     await assertPermission(user, "accounting", LIFECYCLE_ACTION);
 
-    const group = await ledgerGroupRepository.activate(id, user.companyId);
-    if (!group) {
-      throw new AppError("Ledger group not found.");
+    const result = await ledgerGroupRepository.activate(id, user.companyId);
+    switch (result.status) {
+      case "not_found":
+        throw new AppError("Ledger group not found.");
+      case "parent_inactive":
+        throw new AppError("Cannot activate a group while its parent group is inactive.");
+      case "ok":
+        return result.ledgerGroup;
     }
-    return group;
   },
 
   async deactivateLedgerGroup(id: string): Promise<LedgerGroup> {

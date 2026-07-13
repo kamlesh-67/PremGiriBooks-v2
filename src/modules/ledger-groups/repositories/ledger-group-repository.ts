@@ -5,7 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_LEDGER_GROUPS } from "@/modules/ledger-groups/constants/default-groups";
 import { isRecordNotFoundError } from "@/modules/ledger-groups/utils/prisma-errors";
 import { withRetry } from "@/modules/ledger-groups/utils/with-retry";
-import type { DeactivateLedgerGroupResult, LedgerGroupListFilters } from "@/types/ledger-group";
+import type {
+  ActivateLedgerGroupResult,
+  DeactivateLedgerGroupResult,
+  LedgerGroupListFilters,
+} from "@/types/ledger-group";
 
 const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
 
@@ -94,14 +98,26 @@ export const ledgerGroupRepository = {
     });
   },
 
-  async activate(id: string, companyId: string): Promise<LedgerGroup | null> {
+  // Also checks the parent (if any) is active in the same transaction —
+  // reactivating a child under a still-inactive parent would reach exactly
+  // the "active child under an inactive parent" state deactivate()'s own
+  // "no active children" invariant exists to prevent.
+  async activate(id: string, companyId: string): Promise<ActivateLedgerGroupResult> {
     return prisma.$transaction(async (tx) => {
       const existing = await tx.ledgerGroup.findUnique({ where: { id } });
       if (!existing || existing.companyId !== companyId) {
-        return null;
+        return { status: "not_found" };
       }
 
-      return tx.ledgerGroup.update({ where: { id }, data: { isActive: true } });
+      if (existing.parentGroupId) {
+        const parent = await tx.ledgerGroup.findUnique({ where: { id: existing.parentGroupId } });
+        if (!parent || !parent.isActive) {
+          return { status: "parent_inactive" };
+        }
+      }
+
+      const ledgerGroup = await tx.ledgerGroup.update({ where: { id }, data: { isActive: true } });
+      return { status: "ok", ledgerGroup };
     });
   },
 

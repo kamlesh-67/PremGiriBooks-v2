@@ -17,7 +17,7 @@ const REMARKS_SCHEMA = z.string().trim().max(500, "Remarks must be at most 500 c
 export const createLedgerGroupSchema = z
   .object({
     name: NAME_SCHEMA,
-    parentGroupId: z.string().uuid().optional(),
+    parentGroupId: z.uuid().optional(),
     natureType: z.enum(ACCOUNT_NATURES).optional(),
     affectsGrossProfit: z.boolean().optional(),
     remarks: REMARKS_SCHEMA,

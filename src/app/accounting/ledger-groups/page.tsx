@@ -16,9 +16,12 @@ export default async function LedgerGroupListPage() {
     redirect("/");
   }
 
-  const [tree, isAdmin] = await Promise.all([
+  const [tree, isAdmin, canCreate, canEdit, canManage] = await Promise.all([
     ledgerGroupService.listLedgerGroupTree(),
     isCurrentUserAdmin(),
+    hasPermission(user, "accounting", "create"),
+    hasPermission(user, "accounting", "edit"),
+    hasPermission(user, "accounting", "delete"),
   ]);
 
   return (
@@ -31,18 +34,20 @@ export default async function LedgerGroupListPage() {
               Manage the chart-of-accounts group hierarchy for your company.
             </p>
           </div>
-          <Button
-            nativeButton={false}
-            render={
-              <Link href="/accounting/ledger-groups/new">
-                <Plus size={18} />
-                New Ledger Group
-              </Link>
-            }
-          />
+          {canCreate ? (
+            <Button
+              nativeButton={false}
+              render={
+                <Link href="/accounting/ledger-groups/new">
+                  <Plus size={18} />
+                  New Ledger Group
+                </Link>
+              }
+            />
+          ) : null}
         </div>
 
-        <LedgerGroupTree nodes={tree} />
+        <LedgerGroupTree nodes={tree} canEdit={canEdit} canManage={canManage} />
       </div>
     </AppShell>
   );

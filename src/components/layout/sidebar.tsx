@@ -26,7 +26,7 @@ const NAV_ITEMS = [
   { icon: ShoppingCart, label: "Sales" },
   { icon: Truck, label: "Purchase" },
   { icon: Package, label: "Inventory" },
-  { icon: Calculator, label: "Accounting", href: "/accounting", adminOnly: true },
+  { icon: Calculator, label: "Accounting", href: "/accounting" },
   { icon: Receipt, label: "GST" },
   { icon: BarChart3, label: "Reports" },
   { icon: Users, label: "Employees" },

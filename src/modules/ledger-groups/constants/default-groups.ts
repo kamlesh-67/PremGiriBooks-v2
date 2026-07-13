@@ -1,10 +1,10 @@
 import type { AccountNature } from "@prisma/client";
 
 export interface DefaultLedgerGroupSeed {
-  name: string;
-  parent: string | null;
-  nature: AccountNature;
-  affectsGrossProfit: boolean;
+  readonly name: string;
+  readonly parent: string | null;
+  readonly nature: AccountNature;
+  readonly affectsGrossProfit: boolean;
 }
 
 // The standard Tally-class Indian-accounting chart-of-accounts skeleton every
@@ -12,7 +12,7 @@ export interface DefaultLedgerGroupSeed {
 // table. Every `parent` here references a top-level (parent: null) group's
 // `name`, so a single two-pass insert (parents, then children) is always
 // enough — never a deeper hierarchy.
-export const DEFAULT_LEDGER_GROUPS: DefaultLedgerGroupSeed[] = [
+export const DEFAULT_LEDGER_GROUPS: readonly DefaultLedgerGroupSeed[] = [
   { name: "Capital Account", parent: null, nature: "LIABILITY", affectsGrossProfit: false },
   { name: "Reserves & Surplus", parent: null, nature: "LIABILITY", affectsGrossProfit: false },
   { name: "Loans (Liability)", parent: null, nature: "LIABILITY", affectsGrossProfit: false },
