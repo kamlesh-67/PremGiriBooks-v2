@@ -1,3 +1,4 @@
+import { AppError } from "@/lib/app-error";
 import { assertAdministrator, getCurrentUser } from "@/lib/current-user";
 import { financialYearRepository } from "@/modules/financial-year/repositories/financial-year-repository";
 import { normalizeFinancialYearInput } from "@/modules/financial-year/utils/normalize-financial-year-input";
@@ -47,16 +48,16 @@ export const financialYearService = {
 
     const existing = await financialYearRepository.findById(id);
     if (!existing) {
-      throw new Error("Financial year not found.");
+      throw new AppError("Financial year not found.");
     }
     if (existing.isClosed) {
-      throw new Error("Closed financial years cannot be edited.");
+      throw new AppError("Closed financial years cannot be edited.");
     }
 
     const data = normalizeFinancialYearInput(financialYearSchema.parse(input));
     const updated = await financialYearRepository.update(id, existing.companyId, data);
     if (!updated) {
-      throw new Error("Financial year not found.");
+      throw new AppError("Financial year not found.");
     }
     return updated;
   },
@@ -66,10 +67,10 @@ export const financialYearService = {
 
     const financialYear = await financialYearRepository.findById(id);
     if (!financialYear) {
-      throw new Error("Financial year not found.");
+      throw new AppError("Financial year not found.");
     }
     if (financialYear.isClosed) {
-      throw new Error("Closed financial years cannot be set as current.");
+      throw new AppError("Closed financial years cannot be set as current.");
     }
 
     return financialYearRepository.setCurrent(financialYear.companyId, id);
@@ -80,10 +81,10 @@ export const financialYearService = {
 
     const financialYear = await financialYearRepository.findById(id);
     if (!financialYear) {
-      throw new Error("Financial year not found.");
+      throw new AppError("Financial year not found.");
     }
     if (financialYear.isClosed) {
-      throw new Error("Financial year is already closed.");
+      throw new AppError("Financial year is already closed.");
     }
 
     return financialYearRepository.close(financialYear.companyId, id);

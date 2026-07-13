@@ -1,8 +1,13 @@
 import { z } from "zod";
 
+import {
+  PASSWORD_COMPLEXITY_MESSAGE,
+  PASSWORD_COMPLEXITY_REGEX,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from "@/constants/password-policy";
+
 const MOBILE_REGEX = /^[6-9]\d{9}$/;
-const PASSWORD_COMPLEXITY_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).*$/;
-const PASSWORD_MIN_LENGTH = 8;
 
 function optionalPattern(regex: RegExp, message: string) {
   return z
@@ -46,12 +51,12 @@ export const updateUserSchema = z.object({
   mobile: optionalPattern(MOBILE_REGEX, "Enter a valid 10-digit mobile number"),
   password: z
     .string()
-    .max(128, "Password is too long")
+    .max(PASSWORD_MAX_LENGTH, "Password is too long")
     .refine((value) => value === "" || value.length >= PASSWORD_MIN_LENGTH, {
       message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
     })
     .refine((value) => value === "" || PASSWORD_COMPLEXITY_REGEX.test(value), {
-      message: "Password must include an uppercase letter, a lowercase letter, and a number",
+      message: PASSWORD_COMPLEXITY_MESSAGE,
     }),
   roleId: z.string().trim().min(1, "Role is required"),
 });

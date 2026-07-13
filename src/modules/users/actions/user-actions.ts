@@ -1,29 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ZodError } from "zod";
 
-import { AuthorizationError } from "@/lib/current-user";
+import { toActionErrorMessage } from "@/lib/action-error";
 import { userService } from "@/modules/users/services/user-service";
 import type { UserFormInput } from "@/modules/users/validation/user-schema";
 import type { ActionResult } from "@/types/api";
 import type { UserWithRole } from "@/types/user";
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof AuthorizationError) {
-    return error.message;
-  }
-
-  if (error instanceof ZodError) {
-    return error.issues[0]?.message ?? "Invalid input.";
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Something went wrong. Please try again.";
-}
 
 export async function createUserAction(
   input: UserFormInput
@@ -32,7 +15,7 @@ export async function createUserAction(
   try {
     user = await userService.createUser(input);
   } catch (error) {
-    return { success: false, error: toErrorMessage(error) };
+    return { success: false, error: toActionErrorMessage(error) };
   }
 
   revalidatePath("/settings/users");
@@ -47,7 +30,7 @@ export async function updateUserAction(
   try {
     user = await userService.updateUser(id, input);
   } catch (error) {
-    return { success: false, error: toErrorMessage(error) };
+    return { success: false, error: toActionErrorMessage(error) };
   }
 
   revalidatePath("/settings/users");
@@ -60,7 +43,7 @@ export async function activateUserAction(id: string): Promise<ActionResult<UserW
   try {
     user = await userService.activateUser(id);
   } catch (error) {
-    return { success: false, error: toErrorMessage(error) };
+    return { success: false, error: toActionErrorMessage(error) };
   }
 
   revalidatePath("/settings/users");
@@ -72,7 +55,7 @@ export async function deactivateUserAction(id: string): Promise<ActionResult<Use
   try {
     user = await userService.deactivateUser(id);
   } catch (error) {
-    return { success: false, error: toErrorMessage(error) };
+    return { success: false, error: toActionErrorMessage(error) };
   }
 
   revalidatePath("/settings/users");

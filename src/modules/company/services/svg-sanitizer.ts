@@ -1,6 +1,8 @@
 import { JSDOM } from "jsdom";
 import DOMPurify, { type WindowLike } from "dompurify";
 
+import { AppError } from "@/lib/app-error";
+
 const window = new JSDOM("").window;
 const purify = DOMPurify(window as unknown as WindowLike);
 
@@ -90,7 +92,7 @@ export function sanitizeSvg(content: string): string {
   });
 
   if (!SVG_ROOT_PATTERN.test(sanitized)) {
-    throw new Error("File does not appear to be a valid SVG image.");
+    throw new AppError("File does not appear to be a valid SVG image.");
   }
 
   return sanitized;

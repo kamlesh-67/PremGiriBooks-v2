@@ -1,5 +1,6 @@
 import type { Role } from "@prisma/client";
 
+import { AppError } from "@/lib/app-error";
 import { AuthorizationError, type CurrentUser, getCurrentUser } from "@/lib/current-user";
 import { logger } from "@/lib/logger";
 import { hashPassword } from "@/lib/password";
@@ -30,17 +31,17 @@ async function requireAdministrator(): Promise<CurrentUser> {
 function translateUserPersistError(error: unknown): never {
   const fields = getUniqueConstraintFields(error);
   if (fields.includes("username")) {
-    throw new Error("Username is already taken.");
+    throw new AppError("Username is already taken.");
   }
   if (fields.includes("email")) {
-    throw new Error("Email is already registered.");
+    throw new AppError("Email is already registered.");
   }
 
   // Anything else is unexpected (e.g. a transient DB error) — never surface
   // raw internal detail to the client, per code-standards.md's "Never expose
   // internal exceptions to users."
   logger.error({ err: error }, "Unexpected error while saving a user");
-  throw new Error("Failed to save the user. Please try again.");
+  throw new AppError("Failed to save the user. Please try again.");
 }
 
 export const userService = {
@@ -92,9 +93,9 @@ export const userService = {
 
     switch (result.status) {
       case "invalid_role":
-        throw new Error("Selected role does not exist.");
+        throw new AppError("Selected role does not exist.");
       case "inactive_role":
-        throw new Error("Selected role is inactive and cannot be assigned.");
+        throw new AppError("Selected role is inactive and cannot be assigned.");
       case "ok":
         return result.user;
     }
@@ -119,13 +120,13 @@ export const userService = {
 
     switch (result.status) {
       case "not_found":
-        throw new Error("User not found.");
+        throw new AppError("User not found.");
       case "invalid_role":
-        throw new Error("Selected role does not exist.");
+        throw new AppError("Selected role does not exist.");
       case "inactive_role":
-        throw new Error("Selected role is inactive and cannot be assigned.");
+        throw new AppError("Selected role is inactive and cannot be assigned.");
       case "last_administrator":
-        throw new Error("At least one active Administrator must remain for this company.");
+        throw new AppError("At least one active Administrator must remain for this company.");
       case "ok":
         return result.user;
     }
@@ -135,7 +136,7 @@ export const userService = {
     const currentUser = await requireAdministrator();
     const user = await userRepository.setActive(id, currentUser.companyId, true);
     if (!user) {
-      throw new Error("User not found.");
+      throw new AppError("User not found.");
     }
     return user;
   },
@@ -146,11 +147,11 @@ export const userService = {
     const result = await userRepository.deactivate(id, currentUser.companyId, currentUser.id);
     switch (result.status) {
       case "not_found":
-        throw new Error("User not found.");
+        throw new AppError("User not found.");
       case "self":
-        throw new Error("You cannot deactivate your own account.");
+        throw new AppError("You cannot deactivate your own account.");
       case "last_administrator":
-        throw new Error("At least one active Administrator must remain for this company.");
+        throw new AppError("At least one active Administrator must remain for this company.");
       case "ok":
         return result.user;
     }

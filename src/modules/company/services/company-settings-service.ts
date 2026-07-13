@@ -1,5 +1,6 @@
 import type { CompanySettings } from "@prisma/client";
 
+import { AppError } from "@/lib/app-error";
 import { assertAdministrator, getCurrentUser } from "@/lib/current-user";
 import { companySettingsRepository } from "@/modules/company/repositories/company-settings-repository";
 import {
@@ -22,7 +23,7 @@ export const companySettingsService = {
     const data = companySettingsSchema.parse(input);
     const settings = await companySettingsRepository.update(companyId, data);
     if (!settings) {
-      throw new Error("Company settings not found.");
+      throw new AppError("Company settings not found.");
     }
     return settings;
   },

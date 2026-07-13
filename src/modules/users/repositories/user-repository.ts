@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import { AppError } from "@/lib/app-error";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import type { UserProfileFields } from "@/modules/users/utils/normalize-user-input";
@@ -43,7 +44,7 @@ async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
           { attempt, maxAttempts: MAX_TRANSACTION_RETRIES },
           "User transaction retries exhausted after repeated write-skew conflicts"
         );
-        throw new Error(CONFLICT_MESSAGE);
+        throw new AppError(CONFLICT_MESSAGE);
       }
 
       logger.warn(
@@ -53,7 +54,7 @@ async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
     }
   }
 
-  throw new Error(CONFLICT_MESSAGE);
+  throw new AppError(CONFLICT_MESSAGE);
 }
 
 function buildWhere(companyId: string, filters: UserListFilters): Prisma.UserWhereInput {
@@ -91,6 +92,20 @@ export const userRepository = {
       include: SAFE_INCLUDE,
       omit: SAFE_OMIT,
     });
+  },
+
+  // The only two places passwordHash is allowed to leave this file's own
+  // scope: reading it to verify a self-service password change, and writing
+  // a freshly-hashed replacement. Every other query in this repository
+  // omits it (SAFE_OMIT), per the "passwordHash never leaves the repository
+  // layer" rule established in feature-spec 10.
+  async findPasswordHashById(id: string): Promise<string | null> {
+    const user = await prisma.user.findUnique({ where: { id }, select: { passwordHash: true } });
+    return user?.passwordHash ?? null;
+  },
+
+  async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
+    await prisma.user.update({ where: { id }, data: { passwordHash } });
   },
 
   /**

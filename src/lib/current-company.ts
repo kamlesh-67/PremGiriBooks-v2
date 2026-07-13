@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 
+import { AppError } from "@/lib/app-error";
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
 import { resolveFailingClosed } from "@/lib/current-user";
 import { companyService } from "@/modules/company/services/company-service";
@@ -35,11 +36,11 @@ export const getCurrentCompany = cache(async (): Promise<CompanyWithSettings | n
 export async function setCurrentCompany(companyId: string): Promise<CompanyWithSettings> {
   const company = await companyService.getCompany(companyId);
   if (!company) {
-    throw new Error("Company not found.");
+    throw new AppError("Company not found.");
   }
 
   if (!company.isActive) {
-    throw new Error("Inactive companies cannot be selected.");
+    throw new AppError("Inactive companies cannot be selected.");
   }
 
   const cookieStore = await cookies();

@@ -5,6 +5,7 @@
 // than showing a raw id, per BREADCRUMB_ID_PATTERN below.
 export const BREADCRUMB_LABELS: Record<string, string> = {
   masters: "Masters",
+  profile: "My Profile",
   company: "Company Management",
   "financial-year": "Financial Year Management",
   branch: "Branch Management",

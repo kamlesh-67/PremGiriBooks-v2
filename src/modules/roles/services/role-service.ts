@@ -1,6 +1,7 @@
 import type { Role } from "@prisma/client";
 
 import { DEFAULT_ROLE_NAMES } from "@/constants/roles";
+import { AppError } from "@/lib/app-error";
 import { assertAdministrator } from "@/lib/current-user";
 import { logger } from "@/lib/logger";
 import { roleRepository } from "@/modules/roles/repositories/role-repository";
@@ -10,13 +11,13 @@ import type { RoleWithPermissionCount } from "@/types/role";
 
 function translateRolePersistError(error: unknown): never {
   if (isUniqueConstraintError(error)) {
-    throw new Error("A role with this name already exists.");
+    throw new AppError("A role with this name already exists.");
   }
 
   // Never surface raw internal detail to the client, per code-standards.md's
   // "Never expose internal exceptions to users."
   logger.error({ err: error }, "Unexpected error while saving a role");
-  throw new Error("Failed to save the role. Please try again.");
+  throw new AppError("Failed to save the role. Please try again.");
 }
 
 export const roleService = {
@@ -47,7 +48,7 @@ export const roleService = {
 
     const existing = await roleRepository.findById(id);
     if (!existing) {
-      throw new Error("Role not found.");
+      throw new AppError("Role not found.");
     }
 
     // Almost every admin gate in this codebase (assertAdministrator(),
@@ -61,7 +62,7 @@ export const roleService = {
     // creating new custom roles under any other name is unaffected.
     const isDefaultRole = (DEFAULT_ROLE_NAMES as readonly string[]).includes(existing.name);
     if (isDefaultRole && data.name !== existing.name) {
-      throw new Error(`"${existing.name}" is a built-in role and cannot be renamed.`);
+      throw new AppError(`"${existing.name}" is a built-in role and cannot be renamed.`);
     }
 
     let role: Role | null;
@@ -72,7 +73,7 @@ export const roleService = {
     }
 
     if (!role) {
-      throw new Error("Role not found.");
+      throw new AppError("Role not found.");
     }
     return role;
   },
@@ -81,7 +82,7 @@ export const roleService = {
     await assertAdministrator();
     const role = await roleRepository.setActive(id, true);
     if (!role) {
-      throw new Error("Role not found.");
+      throw new AppError("Role not found.");
     }
     return role;
   },
@@ -92,9 +93,9 @@ export const roleService = {
 
     switch (result.status) {
       case "not_found":
-        throw new Error("Role not found.");
+        throw new AppError("Role not found.");
       case "last_administrator_capable":
-        throw new Error("At least one active role with full access must remain.");
+        throw new AppError("At least one active role with full access must remain.");
       case "ok":
         return result.role;
     }

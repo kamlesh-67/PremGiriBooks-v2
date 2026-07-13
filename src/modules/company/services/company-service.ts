@@ -1,3 +1,4 @@
+import { AppError } from "@/lib/app-error";
 import { assertAdministrator, getCurrentUser } from "@/lib/current-user";
 import { companyRepository } from "@/modules/company/repositories/company-repository";
 import { normalizeCompanyInput } from "@/modules/company/utils/normalize-company-input";
@@ -51,7 +52,7 @@ export const companyService = {
     const data = normalizeCompanyInput(companySchema.parse(input));
     const company = await companyRepository.update(id, data);
     if (!company) {
-      throw new Error("Company not found.");
+      throw new AppError("Company not found.");
     }
     return company;
   },
@@ -60,7 +61,7 @@ export const companyService = {
     await assertAdministrator();
     const company = await companyRepository.setActive(id, true);
     if (!company) {
-      throw new Error("Company not found.");
+      throw new AppError("Company not found.");
     }
     return company;
   },
@@ -69,7 +70,7 @@ export const companyService = {
     await assertAdministrator();
     const company = await companyRepository.setActive(id, false);
     if (!company) {
-      throw new Error("Company not found.");
+      throw new AppError("Company not found.");
     }
     return company;
   },

@@ -2,9 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { ZodError } from "zod";
 
-import { AuthorizationError } from "@/lib/current-user";
+import { toActionErrorMessage } from "@/lib/action-error";
 import { getCurrentCompany } from "@/lib/current-company";
 import {
   clearCurrentFinancialYear,
@@ -15,22 +14,6 @@ import { financialYearService } from "@/modules/financial-year/services/financia
 import type { FinancialYearInput } from "@/modules/financial-year/validation/financial-year-schema";
 import type { ActionResult } from "@/types/api";
 import type { FinancialYear } from "@/types/financial-year";
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof AuthorizationError) {
-    return error.message;
-  }
-
-  if (error instanceof ZodError) {
-    return error.issues[0]?.message ?? "Invalid input.";
-  }
-
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Something went wrong. Please try again.";
-}
 
 export async function createFinancialYearAction(
   input: FinancialYearInput
@@ -45,7 +28,7 @@ export async function createFinancialYearAction(
     revalidatePath("/financial-year");
     return { success: true, data: financialYear };
   } catch (error) {
-    return { success: false, error: toErrorMessage(error) };
+    return { success: false, error: toActionErrorMessage(error) };
   }
 }
 
@@ -59,7 +42,7 @@ export async function updateFinancialYearAction(
     revalidatePath(`/financial-year/${id}/edit`);
     return { success: true, data: financialYear };
   } catch (error) {
-    return { success: false, error: toErrorMessage(error) };
+    return { success: false, error: toActionErrorMessage(error) };
   }
 }
 
@@ -71,7 +54,7 @@ export async function setCurrentFinancialYearAction(
     revalidatePath("/financial-year");
     return { success: true, data: financialYear };
   } catch (error) {
-    return { success: false, error: toErrorMessage(error) };
+    return { success: false, error: toActionErrorMessage(error) };
   }
 }
 
@@ -90,7 +73,7 @@ export async function closeFinancialYearAction(id: string): Promise<ActionResult
     revalidatePath("/financial-year");
     return { success: true, data: result.financialYear };
   } catch (error) {
-    return { success: false, error: toErrorMessage(error) };
+    return { success: false, error: toActionErrorMessage(error) };
   }
 }
 
@@ -98,7 +81,7 @@ export async function selectFinancialYearAction(financialYearId: string): Promis
   try {
     await setCurrentFinancialYear(financialYearId);
   } catch (error) {
-    return { success: false, error: toErrorMessage(error) };
+    return { success: false, error: toActionErrorMessage(error) };
   }
 
   revalidatePath("/", "layout");
