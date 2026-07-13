@@ -1,9 +1,11 @@
 import { Prisma } from "@prisma/client";
 
+import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import type { UserProfileFields } from "@/modules/users/utils/normalize-user-input";
 import { isRetryableTransactionError } from "@/modules/users/utils/prisma-errors";
 import type {
+  CreateUserResult,
   DeactivateUserResult,
   UpdateUserResult,
   UserListFilters,
@@ -22,18 +24,32 @@ const CONFLICT_MESSAGE = "This user was changed by another request. Please try a
  * alone only detects a write-skew conflict, it doesn't resolve it, so the
  * "last active Administrator" count-then-write in updateProfile/deactivate
  * needs a bounded retry the same way "only one current financial year" does.
+ *
+ * Logs each retry and, if retries are exhausted, logs that too before
+ * throwing CONFLICT_MESSAGE — otherwise repeated write-skew contention on
+ * this table would be invisible to anything but the end user's error toast.
  */
 async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
   for (let attempt = 1; attempt <= MAX_TRANSACTION_RETRIES; attempt += 1) {
     try {
       return await operation();
     } catch (error) {
-      if (!isRetryableTransactionError(error) || attempt === MAX_TRANSACTION_RETRIES) {
-        if (isRetryableTransactionError(error)) {
-          throw new Error(CONFLICT_MESSAGE);
-        }
+      if (!isRetryableTransactionError(error)) {
         throw error;
       }
+
+      if (attempt === MAX_TRANSACTION_RETRIES) {
+        logger.error(
+          { attempt, maxAttempts: MAX_TRANSACTION_RETRIES },
+          "User transaction retries exhausted after repeated write-skew conflicts"
+        );
+        throw new Error(CONFLICT_MESSAGE);
+      }
+
+      logger.warn(
+        { attempt, maxAttempts: MAX_TRANSACTION_RETRIES },
+        "Retrying user transaction after a write-skew conflict"
+      );
     }
   }
 
@@ -77,16 +93,38 @@ export const userRepository = {
     });
   },
 
+  /**
+   * Checks the selected role's existence and active status inside the same
+   * Serializable transaction as the insert, closing the TOCTOU window a
+   * separate pre-write check in the service layer left open: without this,
+   * a role could be deactivated by another request in the gap between
+   * userService.createUser's check and this write, letting a brand-new user
+   * end up assigned to an inactive role despite the check having passed.
+   */
   create(
     companyId: string,
     profile: UserProfileFields,
     passwordHash: string
-  ): Promise<UserWithRole> {
-    return prisma.user.create({
-      data: { ...profile, passwordHash, companyId },
-      include: SAFE_INCLUDE,
-      omit: SAFE_OMIT,
-    });
+  ): Promise<CreateUserResult> {
+    return withRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const role = await tx.role.findUnique({ where: { id: profile.roleId } });
+        if (!role) {
+          return { status: "invalid_role" };
+        }
+        if (!role.isActive) {
+          return { status: "inactive_role" };
+        }
+
+        const user = await tx.user.create({
+          data: { ...profile, passwordHash, companyId },
+          include: SAFE_INCLUDE,
+          omit: SAFE_OMIT,
+        });
+
+        return { status: "ok", user };
+      }, SERIALIZABLE)
+    );
   },
 
   /**
@@ -116,6 +154,23 @@ export const userRepository = {
         });
         if (!existing || existing.companyId !== companyId) {
           return { status: "not_found" };
+        }
+
+        // Only checked when the role is actually changing — a no-op
+        // resubmission of the user's own already-inactive role (the Edit
+        // page merges it back into the Select for exactly this case) must
+        // keep working, per 11-role-permissions.md's "existing users keep
+        // functioning under a deactivated role" rule. Checked inside this
+        // same Serializable transaction, not a separate pre-write read, to
+        // close the identical TOCTOU window documented on create() above.
+        if (profile.roleId !== existing.roleId) {
+          const newRole = await tx.role.findUnique({ where: { id: profile.roleId } });
+          if (!newRole) {
+            return { status: "invalid_role" };
+          }
+          if (!newRole.isActive) {
+            return { status: "inactive_role" };
+          }
         }
 
         const losesAdministratorRole =

@@ -23,7 +23,49 @@ function createMainWindow(): BrowserWindow {
     void mainWindow.loadFile(path.join(__dirname, "../out/index.html"));
   }
 
+  registerBackForwardNavigation(mainWindow);
+
   return mainWindow;
+}
+
+/**
+ * The app is a single-page Next.js client app loaded once via loadURL —
+ * all in-app navigation happens through the History API (App Router), which
+ * Chromium records as same-document session-history entries same as a
+ * regular browser tab. Wires the OS-level back/forward affordances a
+ * browser tab gets for free but a bare BrowserWindow does not: the mouse
+ * side (thumb) buttons, and Alt+Left/Alt+Right as a keyboard fallback since
+ * autoHideMenuBar leaves no visible menu bar to carry an accelerator.
+ */
+function registerBackForwardNavigation(window: BrowserWindow): void {
+  // Windows/Linux mouse back/forward buttons surface as app-command events.
+  window.on("app-command", (_event, command) => {
+    if (command === "browser-backward" && window.webContents.navigationHistory.canGoBack()) {
+      window.webContents.navigationHistory.goBack();
+    } else if (
+      command === "browser-forward" &&
+      window.webContents.navigationHistory.canGoForward()
+    ) {
+      window.webContents.navigationHistory.goForward();
+    }
+  });
+
+  window.webContents.on("before-input-event", (event, input) => {
+    const isArrowKey = input.key === "Left" || input.key === "Right";
+    if (input.type !== "keyDown" || !isArrowKey || !input.alt) {
+      return;
+    }
+
+    // Prevent Chromium's/the page's own default handling of Alt+Arrow
+    // before triggering our own navigation, so the two can never both fire.
+    event.preventDefault();
+
+    if (input.key === "Left" && window.webContents.navigationHistory.canGoBack()) {
+      window.webContents.navigationHistory.goBack();
+    } else if (input.key === "Right" && window.webContents.navigationHistory.canGoForward()) {
+      window.webContents.navigationHistory.goForward();
+    }
+  });
 }
 
 app.whenReady().then(() => {

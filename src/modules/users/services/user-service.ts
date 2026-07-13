@@ -12,7 +12,12 @@ import {
   updateUserSchema,
   type UserFormInput,
 } from "@/modules/users/validation/user-schema";
-import type { UpdateUserResult, UserListFilters, UserWithRole } from "@/types/user";
+import type {
+  CreateUserResult,
+  UpdateUserResult,
+  UserListFilters,
+  UserWithRole,
+} from "@/types/user";
 
 async function requireAdministrator(): Promise<CurrentUser> {
   const currentUser = await getCurrentUser();
@@ -70,18 +75,28 @@ export const userService = {
     const currentUser = await requireAdministrator();
     const data = createUserSchema.parse(input);
 
-    const role = await roleRepository.findById(data.roleId);
-    if (!role) {
-      throw new Error("Selected role does not exist.");
-    }
-
     const profile = normalizeUserProfileInput(data);
     const passwordHash = await hashPassword(data.password);
 
+    // The role's existence and active status are checked inside
+    // userRepository.create()'s own transaction, not here beforehand — a
+    // separate pre-write read here would leave a TOCTOU window where the
+    // role could be deactivated by another request between the check and
+    // the write. See that method's comment for the full reasoning.
+    let result: CreateUserResult;
     try {
-      return await userRepository.create(currentUser.companyId, profile, passwordHash);
+      result = await userRepository.create(currentUser.companyId, profile, passwordHash);
     } catch (error) {
       translateUserPersistError(error);
+    }
+
+    switch (result.status) {
+      case "invalid_role":
+        throw new Error("Selected role does not exist.");
+      case "inactive_role":
+        throw new Error("Selected role is inactive and cannot be assigned.");
+      case "ok":
+        return result.user;
     }
   },
 
@@ -89,14 +104,12 @@ export const userService = {
     const currentUser = await requireAdministrator();
     const data = updateUserSchema.parse(input);
 
-    const role = await roleRepository.findById(data.roleId);
-    if (!role) {
-      throw new Error("Selected role does not exist.");
-    }
-
     const profile = normalizeUserProfileInput(data);
     const passwordHash = data.password ? await hashPassword(data.password) : undefined;
 
+    // Same reasoning as createUser above — the role check (only performed
+    // when the role is actually changing) lives inside
+    // userRepository.updateProfile()'s own transaction.
     let result: UpdateUserResult;
     try {
       result = await userRepository.updateProfile(id, currentUser.companyId, profile, passwordHash);
@@ -107,6 +120,10 @@ export const userService = {
     switch (result.status) {
       case "not_found":
         throw new Error("User not found.");
+      case "invalid_role":
+        throw new Error("Selected role does not exist.");
+      case "inactive_role":
+        throw new Error("Selected role is inactive and cannot be assigned.");
       case "last_administrator":
         throw new Error("At least one active Administrator must remain for this company.");
       case "ok":

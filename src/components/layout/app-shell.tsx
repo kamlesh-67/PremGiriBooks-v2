@@ -7,6 +7,7 @@ import { TopNavbar } from "@/components/layout/top-navbar";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Content } from "@/components/layout/content";
 import { StatusBar } from "@/components/layout/status-bar";
+import { BreadcrumbBar } from "@/components/layout/breadcrumb-bar";
 
 interface AppShellProps {
   children: ReactNode;
@@ -19,6 +20,7 @@ export function AppShell({ children, isAdmin = false }: AppShellProps) {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground">
       <TopNavbar />
+      <BreadcrumbBar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           collapsed={collapsed}

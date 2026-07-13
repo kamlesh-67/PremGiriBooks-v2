@@ -30,7 +30,7 @@ const NAV_ITEMS = [
   { icon: Receipt, label: "GST" },
   { icon: BarChart3, label: "Reports" },
   { icon: Users, label: "Employees" },
-  { icon: Settings, label: "Settings", href: "/settings/users", adminOnly: true },
+  { icon: Settings, label: "Settings", href: "/settings", adminOnly: true },
 ] as const;
 
 interface SidebarProps {
