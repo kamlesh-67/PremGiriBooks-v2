@@ -7,6 +7,15 @@ export interface DefaultLedgerGroupSeed {
   readonly affectsGrossProfit: boolean;
 }
 
+// Named so other modules that must look up a specific default group by name
+// (14-ledger-master.md's "Cash" seeding under Cash-in-Hand, and its "Bank
+// Accounts" subtree exclusion) reference one shared constant instead of
+// re-typing the literal — a typo or rename here now fails those lookups
+// loudly (AppError) rather than silently, since both call sites throw when
+// the name doesn't resolve to an existing group.
+export const CASH_IN_HAND_GROUP_NAME = "Cash-in-Hand";
+export const BANK_ACCOUNTS_GROUP_NAME = "Bank Accounts";
+
 // The standard Tally-class Indian-accounting chart-of-accounts skeleton every
 // company is seeded with — see 13-ledger-groups.md's Default Group Seeding
 // table. Every `parent` here references a top-level (parent: null) group's
@@ -25,8 +34,8 @@ export const DEFAULT_LEDGER_GROUPS: readonly DefaultLedgerGroupSeed[] = [
   { name: "Fixed Assets", parent: null, nature: "ASSET", affectsGrossProfit: false },
   { name: "Investments", parent: null, nature: "ASSET", affectsGrossProfit: false },
   { name: "Current Assets", parent: null, nature: "ASSET", affectsGrossProfit: false },
-  { name: "Bank Accounts", parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
-  { name: "Cash-in-Hand", parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
+  { name: BANK_ACCOUNTS_GROUP_NAME, parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
+  { name: CASH_IN_HAND_GROUP_NAME, parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
   { name: "Sundry Debtors", parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
   { name: "Loans & Advances (Asset)", parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
   { name: "Misc. Expenses (Asset)", parent: null, nature: "ASSET", affectsGrossProfit: false },

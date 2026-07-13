@@ -37,12 +37,43 @@ export function LedgerGroupSelector({
 }: LedgerGroupSelectorProps) {
   return (
     <Select
-      value={value ?? (allowNone ? NONE_VALUE : undefined)}
+      // Base UI's Select decides controlled-vs-uncontrolled on the first
+      // render by checking whether `value` is `undefined` — passing `null`
+      // (a distinct, defined "controlled, nothing selected yet" sentinel)
+      // instead of `undefined` keeps it controlled for the component's
+      // entire lifetime, even before anything is picked. See
+      // context/current-error/05-role-select-uncontrolled-to-controlled.md
+      // for the reference fix this mirrors.
+      value={value ?? (allowNone ? NONE_VALUE : null)}
       onValueChange={(next) => onChange(!next || next === NONE_VALUE ? undefined : next)}
       disabled={disabled}
     >
       <SelectTrigger className="w-full">
-        <SelectValue placeholder={placeholder} />
+        {/*
+          Select.Value can't derive a display label from a SelectItem's
+          children when they're arbitrary JSX (here, a name + nature badge)
+          rather than plain text — with no items/itemToStringLabel wired up
+          on the root, it falls back to stringifying the raw `value` (the
+          group's uuid). Passing a render function resolves the label from
+          `groups` directly instead of relying on that fallback.
+        */}
+        <SelectValue placeholder={placeholder}>
+          {(current: string | null) => {
+            if (!current || current === NONE_VALUE) {
+              return allowNone ? "No parent (top-level group)" : placeholder;
+            }
+            const selected = groups.find((group) => group.id === current);
+            if (!selected) {
+              return placeholder;
+            }
+            return (
+              <span className="flex flex-1 items-center justify-between gap-2">
+                <span>{selected.name}</span>
+                <AccountNatureBadge nature={selected.natureType} />
+              </span>
+            );
+          }}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {allowNone ? (

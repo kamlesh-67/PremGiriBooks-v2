@@ -65,6 +65,7 @@ model Company {
   branches       Branch[]
   users          User[]
   ledgerGroups   LedgerGroup[]
+  ledgers        Ledger[]
 
   @@index([companyName])
 }
@@ -197,9 +198,36 @@ model LedgerGroup {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
+  ledgers Ledger[]
+
   @@unique([companyId, name])
   @@index([companyId])
   @@index([parentGroupId])
+}
+
+enum BalanceType {
+  DEBIT
+  CREDIT
+}
+
+model Ledger {
+  id                 String      @id @default(uuid())
+  companyId          String
+  company            Company     @relation(fields: [companyId], references: [id])
+  ledgerGroupId      String
+  ledgerGroup        LedgerGroup @relation(fields: [ledgerGroupId], references: [id])
+  name               String
+  openingBalance     Decimal     @default(0) @db.Decimal(14, 2)
+  openingBalanceType BalanceType @default(DEBIT)
+  description        String?
+  isSystemDefined    Boolean     @default(false)
+  isActive           Boolean     @default(true)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@index([ledgerGroupId])
 }
 
 model Session {
