@@ -5,6 +5,7 @@ import { companyRepository } from "@/modules/company/repositories/company-reposi
 import { normalizeCompanyInput } from "@/modules/company/utils/normalize-company-input";
 import { companySchema, type CompanyInput } from "@/modules/company/validation/company-schema";
 import { ledgerGroupService } from "@/modules/ledger-groups/services/ledger-group-service";
+import { ledgerService } from "@/modules/ledgers/services/ledger-service";
 import type { CompanyListFilters, CompanyWithSettings } from "@/types/company";
 
 export const companyService = {
@@ -43,10 +44,12 @@ export const companyService = {
     return companyRepository.findById(id);
   },
 
-  // Seeds the default ledger group skeleton in the same transaction as the
-  // Company row, per 13-ledger-groups.md: a company must never exist with an
-  // incomplete chart of accounts, so a seeding failure rolls the whole
-  // company creation back with it.
+  // Seeds the default ledger group skeleton, then the default "Cash" ledger,
+  // in the same transaction as the Company row — per 13-ledger-groups.md and
+  // 14-ledger-master.md, a company must never exist with an incomplete
+  // chart of accounts, so a seeding failure rolls the whole company creation
+  // back with it. The Ledger seed must run after the Ledger Group seed,
+  // since it looks up the just-created "Cash-in-Hand" group by name.
   async createCompany(input: CompanyInput): Promise<CompanyWithSettings> {
     await assertAdministrator();
     const data = normalizeCompanyInput(companySchema.parse(input));
@@ -54,6 +57,7 @@ export const companyService = {
     return prisma.$transaction(async (tx) => {
       const company = await companyRepository.create(data, tx);
       await ledgerGroupService.seedDefaultGroups(company.id, tx);
+      await ledgerService.seedDefaultLedger(company.id, tx);
       return company;
     });
   },

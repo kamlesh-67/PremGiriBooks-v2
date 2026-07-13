@@ -1,0 +1,43 @@
+import { notFound, redirect } from "next/navigation";
+
+import { AppShell } from "@/components/layout/app-shell";
+import { getCurrentUser, isCurrentUserAdmin } from "@/lib/current-user";
+import { hasPermission } from "@/lib/permissions";
+import { ledgerService } from "@/modules/ledgers/services/ledger-service";
+import { LedgerEditForm } from "@/modules/ledgers/components/ledger-edit-form";
+
+interface EditLedgerPageProps {
+  params: Promise<{ id: string }>;
+}
+
+export default async function EditLedgerPage({ params }: EditLedgerPageProps) {
+  const { id } = await params;
+
+  const user = await getCurrentUser();
+  const canEdit = await hasPermission(user, "accounting", "edit");
+  if (!canEdit) {
+    redirect("/accounting/ledgers");
+  }
+
+  const ledger = await ledgerService.getLedger(id);
+  if (!ledger) {
+    notFound();
+  }
+
+  const isAdmin = await isCurrentUserAdmin();
+
+  return (
+    <AppShell isAdmin={isAdmin}>
+      <div className="flex flex-col gap-6 p-6">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Edit Ledger — {ledger.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            Update the ledger&apos;s name, opening balance, and description.
+          </p>
+        </div>
+
+        <LedgerEditForm ledger={ledger} />
+      </div>
+    </AppShell>
+  );
+}

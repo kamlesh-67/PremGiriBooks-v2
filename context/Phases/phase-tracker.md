@@ -63,12 +63,12 @@ Phase Status
 
 ## Accounting Foundation
 
-🟨 In Progress — Ledger Groups (#12, `context/feature-specs/13-ledger-groups.md`) implemented 2026-07-13. Ledger Master, Bank Management, Expense Heads, and Income Heads (feature-specs 14–17) remain drafted but not implemented.
+🟨 In Progress — Ledger Groups (#12, `context/feature-specs/13-ledger-groups.md`) implemented 2026-07-13. Ledger Master (#13, `context/feature-specs/14-ledger-master.md`) implemented 2026-07-13. Bank Management, Expense Heads, and Income Heads (feature-specs 15–17) remain drafted but not implemented.
 
 | #   | Feature         | Depends On          | Status |
 | --- | --------------- | ------------------- | ------ |
 | 12  | Ledger Groups   | Database Foundation | ✅     |
-| 13  | Ledger Master   | Ledger Groups       | 🟨     |
+| 13  | Ledger Master   | Ledger Groups       | ✅     |
 | 14  | Bank Management | Ledger Master       | 🟨     |
 | 15  | Expense Heads   | Ledger Master       | 🟨     |
 | 16  | Income Heads    | Ledger Master       | 🟨     |
@@ -256,7 +256,7 @@ These are intentionally outside the first production release.
 
 **Next Feature to Implement**
 
-➡ **13 - Ledger Master** (`context/feature-specs/14-ledger-master.md`) — spec drafted, not yet implemented. Depends on Ledger Groups (#12), implemented 2026-07-13. See also the drafted specs for 14 - Bank Management, 15 - Expense Heads, and 16 - Income Heads.
+➡ **14 - Bank Management** (`context/feature-specs/15-bank-management.md`) — spec drafted, not yet implemented. Depends on Ledger Master (#13), implemented 2026-07-13. See also the drafted specs for 15 - Expense Heads and 16 - Income Heads.
 
 ---
 

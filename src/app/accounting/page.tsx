@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ListTree } from "lucide-react";
+import { BookText, ListTree } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,12 @@ const ACCOUNTING_MODULES = [
     icon: ListTree,
     title: "Ledger Groups",
     description: "Manage the chart-of-accounts group hierarchy.",
+  },
+  {
+    href: "/accounting/ledgers",
+    icon: BookText,
+    title: "Ledger Master",
+    description: "Manage the individual accounting ledgers under each group.",
   },
 ] as const;
 
