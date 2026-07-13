@@ -1,9 +1,10 @@
+import { AppError } from "@/lib/app-error";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
 import { verifyPassword } from "@/lib/password";
 import { createSession, deleteSession } from "@/lib/session";
 
-export class InvalidCredentialsError extends Error {
+export class InvalidCredentialsError extends AppError {
   constructor(message = "Invalid username or password.") {
     super(message);
     this.name = "InvalidCredentialsError";

@@ -1,5 +1,6 @@
 import { Prisma, type FinancialYear } from "@prisma/client";
 
+import { AppError } from "@/lib/app-error";
 import { prisma } from "@/lib/prisma";
 import type { FinancialYearPersistData } from "@/modules/financial-year/utils/normalize-financial-year-input";
 import {
@@ -20,14 +21,14 @@ async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
     } catch (error) {
       if (!isRetryableTransactionError(error) || attempt === MAX_TRANSACTION_RETRIES) {
         if (isRetryableTransactionError(error)) {
-          throw new Error("The financial year was changed by another request. Please try again.");
+          throw new AppError("The financial year was changed by another request. Please try again.");
         }
         throw error;
       }
     }
   }
 
-  throw new Error("The financial year was changed by another request. Please try again.");
+  throw new AppError("The financial year was changed by another request. Please try again.");
 }
 
 export const financialYearRepository = {
@@ -56,7 +57,7 @@ export const financialYearRepository = {
           where: { companyId, startDate: { lte: data.endDate }, endDate: { gte: data.startDate } },
         });
         if (overlapping.length > 0) {
-          throw new Error(OVERLAP_ERROR_MESSAGE);
+          throw new AppError(OVERLAP_ERROR_MESSAGE);
         }
 
         return tx.financialYear.create({ data: { ...data, companyId } });
@@ -80,7 +81,7 @@ export const financialYearRepository = {
           },
         });
         if (overlapping.length > 0) {
-          throw new Error(OVERLAP_ERROR_MESSAGE);
+          throw new AppError(OVERLAP_ERROR_MESSAGE);
         }
 
         try {

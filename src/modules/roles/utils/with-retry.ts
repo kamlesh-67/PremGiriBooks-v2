@@ -1,3 +1,5 @@
+import { AppError } from "@/lib/app-error";
+
 const MAX_TRANSACTION_RETRIES = 3;
 const BASE_RETRY_DELAY_MS = 20;
 
@@ -28,7 +30,7 @@ export async function withRetry<T>(
     } catch (error) {
       if (!isRetryable(error) || attempt === MAX_TRANSACTION_RETRIES) {
         if (isRetryable(error)) {
-          throw new Error(conflictMessage);
+          throw new AppError(conflictMessage);
         }
         throw error;
       }
@@ -36,5 +38,5 @@ export async function withRetry<T>(
     }
   }
 
-  throw new Error(conflictMessage);
+  throw new AppError(conflictMessage);
 }

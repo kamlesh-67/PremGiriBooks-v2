@@ -1,6 +1,7 @@
 "use client";
 
-import { BookOpen, Search, Bell, User, LogOut } from "lucide-react";
+import Link from "next/link";
+import { BookOpen, Search, Bell, User, UserCog, LogOut } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,14 @@ export function TopNavbar() {
                 <DropdownMenuSeparator />
               </>
             )}
+            <DropdownMenuItem
+              render={
+                <Link href="/profile">
+                  <UserCog size={16} />
+                  My Profile
+                </Link>
+              }
+            />
             <DropdownMenuItem onClick={() => void handleLogout()}>
               <LogOut size={16} />
               Logout

@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 
+import { AppError } from "@/lib/app-error";
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
 import { getCurrentCompanyId } from "@/lib/current-company";
 import { resolveFailingClosed } from "@/lib/current-user";
@@ -43,16 +44,16 @@ export const getCurrentFinancialYear = cache(async (): Promise<FinancialYear | n
 export async function setCurrentFinancialYear(financialYearId: string): Promise<FinancialYear> {
   const financialYear = await financialYearService.getFinancialYear(financialYearId);
   if (!financialYear) {
-    throw new Error("Financial year not found.");
+    throw new AppError("Financial year not found.");
   }
 
   const companyId = await getCurrentCompanyId();
   if (!companyId || financialYear.companyId !== companyId) {
-    throw new Error("This financial year does not belong to the active company.");
+    throw new AppError("This financial year does not belong to the active company.");
   }
 
   if (financialYear.isClosed) {
-    throw new Error("Closed financial years cannot be selected.");
+    throw new AppError("Closed financial years cannot be selected.");
   }
 
   const cookieStore = await cookies();

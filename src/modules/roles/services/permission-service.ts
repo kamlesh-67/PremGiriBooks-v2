@@ -1,5 +1,6 @@
 import type { Permission } from "@prisma/client";
 
+import { AppError } from "@/lib/app-error";
 import { assertAdministrator } from "@/lib/current-user";
 import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_ACTIONS, PERMISSION_MODULES } from "@/constants/permissions";
 import { permissionRepository } from "@/modules/roles/repositories/permission-repository";
@@ -43,7 +44,7 @@ export const permissionService = {
     for (const pair of validatedPairs) {
       const id = catalogIndex.get(`${pair.module}:${pair.action}`);
       if (!id) {
-        throw new Error(`Unknown permission: ${pair.module}/${pair.action}.`);
+        throw new AppError(`Unknown permission: ${pair.module}/${pair.action}.`);
       }
       permissionIds.push(id);
     }
@@ -51,9 +52,9 @@ export const permissionService = {
     const result = await permissionRepository.assignToRole(roleId, permissionIds);
     switch (result.status) {
       case "not_found":
-        throw new Error("Role not found.");
+        throw new AppError("Role not found.");
       case "last_administrator_capable":
-        throw new Error("At least one active role with full access must remain.");
+        throw new AppError("At least one active role with full access must remain.");
       case "ok":
         return;
     }

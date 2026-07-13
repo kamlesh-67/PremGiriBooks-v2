@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { AppError } from "@/lib/app-error";
 import { LOGO_ALLOWED_MIME_TYPES, LOGO_MAX_FILE_SIZE_BYTES } from "@/constants/company";
 import { sanitizeSvg } from "@/modules/company/services/svg-sanitizer";
 
@@ -16,11 +17,11 @@ const EXTENSION_BY_MIME_TYPE: Record<string, string> = {
 
 export async function saveCompanyLogo(file: File): Promise<string> {
   if (!LOGO_ALLOWED_MIME_TYPES.includes(file.type as (typeof LOGO_ALLOWED_MIME_TYPES)[number])) {
-    throw new Error("Logo must be a PNG, JPG, JPEG, or SVG file.");
+    throw new AppError("Logo must be a PNG, JPG, JPEG, or SVG file.");
   }
 
   if (file.size > LOGO_MAX_FILE_SIZE_BYTES) {
-    throw new Error("Logo must be smaller than 5 MB.");
+    throw new AppError("Logo must be smaller than 5 MB.");
   }
 
   await mkdir(LOGO_UPLOAD_DIR, { recursive: true });

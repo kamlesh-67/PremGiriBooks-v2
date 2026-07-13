@@ -3,20 +3,13 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { toActionErrorMessage } from "@/lib/action-error";
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
-import { InvalidCredentialsError, login, logout } from "@/lib/auth";
+import { login, logout } from "@/lib/auth";
 import { clearCurrentCompany } from "@/lib/current-company";
 import { clearCurrentFinancialYear } from "@/lib/current-financial-year";
 import { loginSchema, type LoginInput } from "@/lib/auth-schema";
 import type { ActionResult } from "@/types/api";
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof InvalidCredentialsError) {
-    return error.message;
-  }
-
-  return "Something went wrong. Please try again.";
-}
 
 export async function loginAction(input: LoginInput): Promise<ActionResult> {
   let sessionId: string;
@@ -28,7 +21,7 @@ export async function loginAction(input: LoginInput): Promise<ActionResult> {
     sessionId = result.sessionId;
     expiresAt = result.expiresAt;
   } catch (error) {
-    return { success: false, error: toErrorMessage(error) };
+    return { success: false, error: toActionErrorMessage(error) };
   }
 
   const cookieStore = await cookies();

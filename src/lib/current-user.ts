@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 
+import { AppError } from "@/lib/app-error";
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
 import { getSessionWithUser } from "@/lib/session";
 
@@ -38,7 +39,7 @@ export async function getCurrentUserOrNull(): Promise<CurrentUser | null> {
   return resolveCurrentUser();
 }
 
-export class AuthenticationError extends Error {
+export class AuthenticationError extends AppError {
   constructor(message = "You must be signed in to perform this action.") {
     super(message);
     this.name = "AuthenticationError";
@@ -87,7 +88,7 @@ export async function isCurrentUserAdmin(): Promise<boolean> {
   return (await getCurrentUserRole()) === "Administrator";
 }
 
-export class AuthorizationError extends Error {
+export class AuthorizationError extends AppError {
   constructor(message = "Only administrators can perform this action.") {
     super(message);
     this.name = "AuthorizationError";
