@@ -31,15 +31,19 @@ export function LedgerTable({ ledgers, canEdit = false, canManage = false }: Led
   async function handleToggleActive(ledger: LedgerWithGroup) {
     setPendingId(ledger.id);
     const action = ledger.isActive ? deactivateLedgerAction : activateLedgerAction;
-    const result = await action(ledger.id);
-    setPendingId(null);
 
-    if (!result.success) {
-      toast.error(result.error ?? "Failed to update ledger status.");
-      return;
+    try {
+      const result = await action(ledger.id);
+      if (!result.success) {
+        toast.error(result.error ?? "Failed to update ledger status.");
+        return;
+      }
+      toast.success(ledger.isActive ? "Ledger deactivated." : "Ledger activated.");
+    } catch {
+      toast.error("Failed to update ledger status.");
+    } finally {
+      setPendingId(null);
     }
-
-    toast.success(ledger.isActive ? "Ledger deactivated." : "Ledger activated.");
   }
 
   if (ledgers.length === 0) {

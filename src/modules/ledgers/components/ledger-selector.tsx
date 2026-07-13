@@ -15,6 +15,14 @@ interface LedgerSelectorProps {
   onChange: (ledgerId: string | undefined) => void;
   placeholder?: string;
   disabled?: boolean;
+  /**
+   * When true, clicking the currently-selected ledger again clears the
+   * selection. Defaults to false — most consumers (a Voucher entry line, a
+   * Bank Account's linked ledger) treat "which ledger" as a required choice,
+   * where re-clicking the same item should just close the popover and leave
+   * the value unchanged, matching LedgerGroupSelector's `allowNone` pattern.
+   */
+  allowNone?: boolean;
 }
 
 /**
@@ -29,6 +37,7 @@ export function LedgerSelector({
   onChange,
   placeholder = "Select a ledger",
   disabled,
+  allowNone = false,
 }: LedgerSelectorProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -48,7 +57,8 @@ export function LedgerSelector({
   }, [ledgers, query]);
 
   function handleSelect(ledgerId: string) {
-    onChange(ledgerId === value ? undefined : ledgerId);
+    const clearing = allowNone && ledgerId === value;
+    onChange(clearing ? undefined : ledgerId);
     setOpen(false);
     setQuery("");
   }

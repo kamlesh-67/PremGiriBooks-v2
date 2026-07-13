@@ -42,7 +42,7 @@ Mapping so far:
 
 ## Current Goal
 
-- **Implement feature-specs 15–17** (`15-bank-management.md` → `17-income-heads.md`), in that dependency order — Bank Management next (the direct dependency none of the remaining three block each other on besides Ledger Master, but the spec numbering and phase-tracker both order Bank Management first), then Expense Heads and Income Heads. Feature-specs 13 (Ledger Groups) and 14 (Ledger Master) are complete. Feature-spec 12 (Branch Management) remains an open, separately-scoped item from a prior session — not part of this goal unless explicitly redirected.
+- **Implement feature-specs 15–17** (`15-bank-management.md` → `17-income-heads.md`) — Bank Management, Expense Heads, and Income Heads each depend only on Ledger Master (already complete) and not on one another, so there is no cross-dependency between the three; implementing them in spec-number order (Bank Management, then Expense Heads, then Income Heads) simply follows `phase-tracker.md`'s listed order, not a hard requirement. Feature-specs 13 (Ledger Groups) and 14 (Ledger Master) are complete. Feature-spec 12 (Branch Management) remains an open, separately-scoped item from a prior session — not part of this goal unless explicitly redirected.
 
 ## Completed
 

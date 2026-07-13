@@ -71,6 +71,14 @@ Every feature must follow this sequence.
 
     ↓
 
+    Repository
+
+    ↓
+
+    Service
+
+    ↓
+
     Business Engine
 
     ↓
@@ -122,17 +130,22 @@ Small, testable changes are preferred.
 
 # Feature Development Order
 
-New features must follow this order.
+New features must follow this order, matching the canonical
+Implementation Workflow sequence above.
 
-1.  Business Rules
-2.  Database Design
-3.  Repository Layer
-4.  Service Layer
-5.  Business Engine
-6.  API
-7.  User Interface
-8.  Testing
-9.  Documentation
+1.  Requirement
+2.  Analysis
+3.  Business Rules
+4.  Database
+5.  Backend
+6.  Repository
+7.  Service
+8.  Business Engine
+9.  API
+10. UI
+11. Testing
+12. Documentation
+13. Progress Update
 
 Never start from the UI.
 
@@ -262,7 +275,8 @@ Every API must
 2.  Authenticate User
 3.  Check Permissions
 4.  Call Business Engine
-5.  Save Transaction
+5.  Save Transaction (write/mutation operations only; read-only list,
+    search, and detail APIs may omit this step)
 6.  Return Response
 7.  Log Errors
 
@@ -276,7 +290,7 @@ Every screen must
 
 -   Display Data
 -   Validate Forms
--   Call APIs
+-   Call an approved application boundary (Server Actions or APIs)
 -   Handle User Interaction
 
 UI must never
@@ -492,10 +506,8 @@ Before starting any implementation:
 3.  Ensure the local repository is up to date.
 4.  Resolve any merge conflicts before proceeding.
 
-``` bash
-git checkout main
-git pull origin main
-```
+    git checkout main
+    git pull origin main
 
 ------------------------------------------------------------------------
 
@@ -505,24 +517,18 @@ Create a dedicated branch for the feature being implemented.
 
 Branch naming convention:
 
-``` text
-feature/<feature-name>
-```
+    feature/<feature-name>
 
 Examples
 
-``` text
-feature/ledger-groups
-feature/product-management
-feature/pricing-engine
-feature/customer-management
-```
+    feature/ledger-groups
+    feature/product-management
+    feature/pricing-engine
+    feature/customer-management
 
 Never implement directly on the `main` branch.
 
-``` bash
-git checkout -b feature/<feature-name>
-```
+    git checkout -b feature/<feature-name>
 
 ------------------------------------------------------------------------
 
@@ -546,15 +552,11 @@ After implementation:
 
 Format
 
-``` text
-type(scope): short summary
-```
+    type(scope): short summary
 
 Example
 
-``` text
-feat(ledger): implement ledger group management
-```
+    feat(ledger): implement ledger group management
 
 ------------------------------------------------------------------------
 
@@ -562,9 +564,7 @@ feat(ledger): implement ledger group management
 
 Push the feature branch.
 
-``` bash
-git push -u origin feature/<feature-name>
-```
+    git push -u origin feature/<feature-name>
 
 Never push directly to `main`.
 
@@ -638,15 +638,21 @@ precedence.
             ↓
     2. PRD.md
             ↓
-    3. business-rules.md
+    3. project-overview.md
             ↓
     4. architecture-context.md
             ↓
-    5. project-overview.md
+    5. business-rules.md
             ↓
-    6. code-standards.md
+    6. database-schema.md
             ↓
-    7. Existing Code
+    7. api-contracts.md
+            ↓
+    8. code-standards.md
+            ↓
+    9. progress-tracker.md
+            ↓
+    10. Existing Code
 
 If existing code conflicts with the documentation, prefer the documented
 architecture and record the discrepancy in `progress-tracker.md` before
@@ -671,4 +677,4 @@ explicitly scheduled.
 -   AI Business Assistant
 
 These modules should remain architecturally compatible but out of scope
-for the MVP.v
+for the MVP.
