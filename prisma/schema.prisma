@@ -31,41 +31,50 @@ datasource db {
 // -----------------------------------------------------------------------------
 
 model Company {
-  id              String   @id @default(uuid())
-  companyName     String
-  legalName       String
-  displayName     String?
-  businessType    String?
-  gstin           String?  @unique
-  pan             String?
-  tan             String?
-  cin             String?
-  mobileNumber    String?
-  alternateMobile String?
-  email           String?
-  website         String?
-  addressLine1    String?
-  addressLine2    String?
-  city            String?
-  state           String?
-  district        String?
-  country         String   @default("India")
-  pinCode         String?
-  currency        String   @default("INR")
-  currencySymbol  String   @default("₹")
-  decimalPlaces   Int      @default(2)
-  logo            String?
-  timeZone        String   @default("Asia/Kolkata")
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               String   @id @default(uuid())
+  companyName      String
+  legalName        String
+  displayName      String?
+  businessType     String?
+  gstin            String?  @unique
+  pan              String?
+  tan              String?
+  cin              String?
+  mobileNumber     String?
+  alternateMobile  String?
+  email            String?
+  website          String?
+  addressLine1     String?
+  addressLine2     String?
+  city             String?
+  state            String?
+  district         String?
+  country          String   @default("India")
+  pinCode          String?
+  currency         String   @default("INR")
+  currencySymbol   String   @default("₹")
+  decimalPlaces    Int      @default(2)
+  logo             String?
+  timeZone         String   @default("Asia/Kolkata")
+  isActive         Boolean  @default(true)
+  // Lets a future ERP upgrade detect a company seeded by an older
+  // TenantBootstrapService version (missing a newer default role/permission/
+  // master) without a manual migration. Only the column exists today — no
+  // detect-and-backfill logic reads it yet; see
+  // architecture-Migration-Super-Admin-Administration-Implementation-Plan.md.
+  bootstrapVersion Int      @default(1)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   settings       CompanySettings?
   financialYears FinancialYear[]
   branches       Branch[]
   users          User[]
+  roles          Role[]
   ledgerGroups   LedgerGroup[]
   ledgers        Ledger[]
+  bankAccounts   BankAccount[]
+  auditLogs      AuditLog[]
 
   @@index([companyName])
 }
@@ -118,6 +127,18 @@ model Branch {
   @@unique([companyId, branchCode])
 }
 
+// context/feature-specs/architecture-Migration-Super-Admin-Administration.md
+// (implementation detail recorded in the matching
+// -Implementation-Plan.md) introduces a PLATFORM vs COMPANY split (Super
+// Admin vs Company Admin/Company Users) on top of the prior single-
+// Administrator model. A PLATFORM user (Super Admin) never belongs to a
+// company or holds a Role — companyId/roleId are nullable for exactly that
+// case. A COMPANY user always has both.
+enum UserType {
+  PLATFORM
+  COMPANY
+}
+
 model User {
   id           String   @id @default(uuid())
   username     String   @unique
@@ -126,28 +147,52 @@ model User {
   mobile       String?
   passwordHash String
   isActive     Boolean  @default(true)
-  companyId    String
-  roleId       String
+  userType     UserType @default(COMPANY)
+  companyId    String?
+  roleId       String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  company  Company   @relation(fields: [companyId], references: [id])
-  role     Role      @relation(fields: [roleId], references: [id])
+  company  Company?  @relation(fields: [companyId], references: [id])
+  role     Role?     @relation(fields: [roleId], references: [id])
   sessions Session[]
 
   @@index([companyId])
   @@index([roleId])
+  @@index([userType])
 }
 
+// Roles are per-company (no shared/global rows) — every company gets its own
+// private clone of the 6 reserved default roles, seeded by
+// TenantBootstrapService at company-creation time. The pre-migration global
+// roles were backfilled into per-company copies and every existing User's
+// roleId was repointed (architecture-Migration-Super-Admin-Administration-
+// Implementation-Plan.md's Phase 8) before this column became required.
+//
+// isSystemDefined: this is one of the 6 reserved default roles for its
+// company (Company Admin/Accountant/Sales/Purchase/Store Manager/Employee).
+// isProtected: rename/delete/deactivate/mandatory-permission protection is
+// enforced for this row. Kept independent from isSystemDefined (rather than
+// derived from it) so a future feature could protect a hand-created custom
+// role without redefining what "system default" means — today every
+// isSystemDefined role is seeded with isProtected: true and no custom role
+// ever is.
 model Role {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(uuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id])
+  name            String
+  isSystemDefined Boolean  @default(false)
+  isProtected     Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   users       User[]
   permissions RolePermission[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
 }
 
 model Permission {
@@ -225,9 +270,69 @@ model Ledger {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
+  bankAccount BankAccount?
+
   @@unique([companyId, name])
   @@index([companyId])
   @@index([ledgerGroupId])
+}
+
+enum BankAccountType {
+  SAVINGS
+  CURRENT
+  CASH_CREDIT
+  OVERDRAFT
+}
+
+// A strict 1:1 extension of Ledger (ledgerId @unique) — the display name,
+// opening balance, and active/inactive state live on the Ledger row;
+// BankAccount only adds the fields a generic Ledger has no room for.
+// companyId duplicates ledger.companyId (a deliberate denormalization
+// matching every other model's direct companyId column in this codebase),
+// kept in sync only because BankAccount and its Ledger are always created
+// and updated together in the same transaction (15-bank-management.md),
+// never independently.
+model BankAccount {
+  id                String          @id @default(uuid())
+  companyId         String
+  company           Company         @relation(fields: [companyId], references: [id])
+  ledgerId          String          @unique
+  ledger            Ledger          @relation(fields: [ledgerId], references: [id])
+  bankName          String
+  accountNumber     String
+  ifscCode          String
+  branchName        String
+  accountHolderName String
+  accountType       BankAccountType @default(CURRENT)
+  upiId             String?
+  isActive          Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([companyId, accountNumber])
+  @@index([companyId])
+}
+
+// Scoped narrowly to the Administration-side tenant-lifecycle events the
+// Super Admin migration itself introduces (Company Created, Company
+// Admin Created, Company Activated/Deactivated, Company Admin Password
+// Reset) — not a general audit-log retrofit across every existing module.
+// That broader "Write Audit Log" gap remains separately tracked in
+// architecture-context.md's Known Implementation Gaps.
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String
+  action      String
+  targetType  String
+  targetId    String
+  companyId   String?
+  company     Company? @relation(fields: [companyId], references: [id])
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([companyId])
+  @@index([actorUserId])
+  @@index([targetType, targetId])
 }
 
 model Session {

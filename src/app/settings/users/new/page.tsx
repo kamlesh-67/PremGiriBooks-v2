@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { userService } from "@/modules/users/services/user-service";
 import { UserCreateForm } from "@/modules/users/components/user-create-form";
 
 export default async function NewUserPage() {
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
   if (!isAdmin) {
     redirect("/settings/users");
   }

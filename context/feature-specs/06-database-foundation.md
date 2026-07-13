@@ -103,6 +103,13 @@ Include
 
 Password implementation will be added later.
 
+> **Amended 2026-07-13** per
+> `architecture-Migration-Super-Admin-Administration.md` (implementation
+> detail in the matching `-Implementation-Plan.md`): `User` also has a
+> `userType` (`PLATFORM`/`COMPANY`) column. Company Relation (`companyId`)
+> — and the Role Relation (`roleId`) — are nullable, not required: a
+> `PLATFORM` user (Super Admin) has neither.
+
 ---
 
 ## Role
@@ -118,6 +125,13 @@ Examples
 - Store Manager
 
 Do not create permissions yet.
+
+> **Amended 2026-07-13**: "Administrator" is renamed "Company Admin," and
+> `Role` is no longer a single global table — it has a required `companyId`
+> (every company holds a private copy of the 6 default roles, seeded by
+> `TenantBootstrapService` at company-creation time), plus
+> `isSystemDefined`/`isProtected` flags. Super Admin is **not** a Role at
+> all — it's determined purely by `User.userType === "PLATFORM"`.
 
 ---
 

@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { AppError } from "@/lib/app-error";
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
 import { getCurrentCompanyId } from "@/lib/current-company";
-import { resolveFailingClosed } from "@/lib/current-user";
+import { getCurrentUserOrNull, resolveFailingClosed } from "@/lib/current-user";
 import { financialYearService } from "@/modules/financial-year/services/financial-year-service";
 import type { FinancialYear } from "@/types/financial-year";
 
@@ -16,6 +16,13 @@ export async function getCurrentFinancialYearId(): Promise<string | null> {
 }
 
 export const getCurrentFinancialYear = cache(async (): Promise<FinancialYear | null> => {
+  // See the matching short-circuit in current-company.ts — a PLATFORM user
+  // never has tenant context.
+  const currentUser = await getCurrentUserOrNull();
+  if (currentUser?.userType === "PLATFORM") {
+    return null;
+  }
+
   const financialYearId = await getCurrentFinancialYearId();
   if (!financialYearId) {
     return null;

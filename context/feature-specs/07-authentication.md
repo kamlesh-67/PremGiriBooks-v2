@@ -171,6 +171,16 @@ Public Routes
 
 Everything else requires authentication.
 
+> **Amended 2026-07-13** per `architecture-Migration-Super-Admin-Administration.md`:
+> `src/proxy.ts` additionally branches authenticated requests by
+> `userType`. A `PLATFORM` user (Super Admin) is redirected to
+> `/administration` from every route except `/administration/**` and
+> `/profile`; a `COMPANY` user is redirected to `/` from anywhere under
+> `/administration`. `PLATFORM` users never enter Company Selection/
+> Financial Year Selection at all — `getCurrentCompany()`/
+> `getCurrentFinancialYear()` short-circuit to `null` for them before any
+> cookie read.
+
 ---
 
 # Authorization
@@ -201,6 +211,14 @@ Support
 - Employee
 
 Do not implement custom roles yet.
+
+> **Amended 2026-07-13**: "Administrator" is renamed "Company Admin" and is
+> no longer the identity check for platform-level authority — Super Admin
+> is `User.userType === "PLATFORM"`, not a Role at all
+> (`architecture-Migration-Super-Admin-Administration.md`). Every one of
+> these 6 roles is now seeded per-company by `TenantBootstrapService`, not
+> once globally. Custom roles were later implemented (`11-role-permissions.md`)
+> and are also company-scoped.
 
 ---
 
@@ -260,6 +278,15 @@ Responsibilities
 - Get current financial year
 
 Future modules should reuse this helper.
+
+> **Amended 2026-07-13**: `getCurrentUser()` returns a discriminated union
+> (`PlatformCurrentUser | CompanyCurrentUser`) — a `PLATFORM` user has no
+> role/company. New `getCurrentCompanyUser()` narrows to the Company
+> variant and is what every company-scoped module actually calls.
+> `assertAdministrator()`/`isCurrentUserAdmin()` were removed in favor of
+> `assertSuperAdmin()`/`isCurrentUserSuperAdmin()` (`userType === "PLATFORM"`,
+> the only hardcoded identity check left anywhere in the app) and real
+> permission checks for every Company-side capability.
 
 ---
 

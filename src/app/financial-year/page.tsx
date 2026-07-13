@@ -5,7 +5,7 @@ import { Plus } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { getCurrentCompany } from "@/lib/current-company";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { financialYearService } from "@/modules/financial-year/services/financial-year-service";
 import { FinancialYearTable } from "@/modules/financial-year/components/financial-year-table";
 
@@ -16,7 +16,7 @@ export default async function FinancialYearListPage() {
   }
 
   const financialYears = await financialYearService.listFinancialYears(company.id);
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
 
   return (
     <AppShell isAdmin={isAdmin}>

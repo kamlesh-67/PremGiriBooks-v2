@@ -4,7 +4,7 @@ import { ShieldCheck, Users as UsersIcon } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 
 const SETTINGS_MODULES = [
   {
@@ -22,7 +22,7 @@ const SETTINGS_MODULES = [
 ] as const;
 
 export default async function SettingsPage() {
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
   if (!isAdmin) {
     redirect("/");
   }

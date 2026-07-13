@@ -2,6 +2,7 @@ import { Prisma, type Permission } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { isRetryableTransactionError } from "@/modules/roles/utils/prisma-errors";
+import { hasOtherActiveFullCoverageRole } from "@/modules/roles/utils/role-coverage";
 import { withRetry } from "@/modules/roles/utils/with-retry";
 import type { AssignPermissionsResult, PermissionPair } from "@/types/role";
 
@@ -54,15 +55,23 @@ export const permissionRepository = {
 
   /**
    * Replaces a role's entire permission set inside one Serializable
-   * transaction, guarding the same "at least one active Administrator-
-   * capable role must remain" invariant role-repository.ts's deactivate()
-   * enforces — removing full permission coverage from the last such role has
-   * the identical end state (zero fully-privileged roles) without ever going
-   * through the dedicated deactivate path. "Administrator-capable" means
-   * currently granted every permission in the catalog, not merely named
-   * "Administrator" — a custom role could also be granted full access.
+   * transaction, guarding the same "at least one active full-coverage role
+   * must remain per company" invariant role-repository.ts's deactivate()
+   * enforces — removing full permission coverage from the last such role
+   * has the identical end state (zero fully-privileged roles for this
+   * company) without ever going through the dedicated deactivate path.
+   * "Full coverage" means currently granted every permission in the
+   * catalog, not merely named "Company Admin" — a custom role could also be
+   * granted full access. Mandatory-permission-set enforcement for
+   * `isProtected` roles is done by the caller (permission-service.ts)
+   * before this is invoked, since it needs the DEFAULT_ROLE_PERMISSIONS
+   * catalog mapping this repository layer has no business knowing about.
    */
-  async assignToRole(roleId: string, permissionIds: string[]): Promise<AssignPermissionsResult> {
+  async assignToRole(
+    roleId: string,
+    companyId: string,
+    permissionIds: string[]
+  ): Promise<AssignPermissionsResult> {
     return withRetry(
       () =>
         prisma.$transaction(async (tx) => {
@@ -70,7 +79,7 @@ export const permissionRepository = {
             where: { id: roleId },
             include: { _count: { select: { permissions: true } } },
           });
-          if (!role) {
+          if (!role || role.companyId !== companyId) {
             return { status: "not_found" };
           }
 
@@ -81,15 +90,13 @@ export const permissionRepository = {
           const willBeFullCoverage = totalPermissions > 0 && uniqueIds.length === totalPermissions;
 
           if (role.isActive && wasFullCoverage && !willBeFullCoverage) {
-            const otherActiveRoles = await tx.role.findMany({
-              where: { isActive: true, id: { not: roleId } },
-              include: { _count: { select: { permissions: true } } },
-            });
-            const stillHasFullCoverageRole = otherActiveRoles.some(
-              (other) => other._count.permissions === totalPermissions
+            const stillHasFullCoverageRole = await hasOtherActiveFullCoverageRole(
+              tx,
+              companyId,
+              roleId
             );
             if (!stillHasFullCoverageRole) {
-              return { status: "last_administrator_capable" };
+              return { status: "last_full_coverage_role" };
             }
           }
 

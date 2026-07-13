@@ -14,9 +14,12 @@ export interface PermissionPair {
 export type DeactivateRoleResult =
   | { status: "ok"; role: Role }
   | { status: "not_found" }
-  | { status: "last_administrator_capable" };
+  | { status: "protected" }
+  | { status: "last_full_coverage_role" };
 
 export type AssignPermissionsResult =
   | { status: "ok" }
   | { status: "not_found" }
-  | { status: "last_administrator_capable" };
+  | { status: "protected" }
+  | { status: "missing_mandatory_permissions"; missing: PermissionPair[] }
+  | { status: "last_full_coverage_role" };

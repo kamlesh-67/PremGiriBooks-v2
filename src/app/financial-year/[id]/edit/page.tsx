@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { financialYearService } from "@/modules/financial-year/services/financial-year-service";
 import { FinancialYearEditForm } from "@/modules/financial-year/components/financial-year-edit-form";
 import { toFinancialYearFormValues } from "@/modules/financial-year/utils/financial-year-form-values";
@@ -18,7 +18,7 @@ export default async function EditFinancialYearPage({ params }: EditFinancialYea
     notFound();
   }
 
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
   if (!isAdmin) {
     redirect("/financial-year");
   }

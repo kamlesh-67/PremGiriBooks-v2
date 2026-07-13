@@ -6,6 +6,18 @@ import { getSessionWithUser, renewSession } from "@/lib/session";
 
 const PUBLIC_ROUTES = new Set(["/login"]);
 
+// Routes a PLATFORM user (Super Admin) is allowed to reach in addition to
+// the /administration tree itself — everything else (ERP routes, Company/
+// Financial-Year/Branch selection) is exclusively for COMPANY users.
+const PLATFORM_ALLOWED_PREFIXES = ["/administration", "/profile"];
+const ADMINISTRATION_PREFIX = "/administration";
+
+function isPlatformAllowedRoute(pathname: string): boolean {
+  return PLATFORM_ALLOWED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
 function clearStaleAuthCookies(response: NextResponse): NextResponse {
   // Company/Financial Year selection is only meaningful alongside a valid
   // session — without this, a stale active_company_id cookie left over from
@@ -40,6 +52,19 @@ export default async function proxy(request: NextRequest) {
   }
 
   if (isPublicRoute) {
+    return NextResponse.redirect(
+      new URL(session.user.userType === "PLATFORM" ? ADMINISTRATION_PREFIX : "/", request.url)
+    );
+  }
+
+  // Platform (Super Admin) and Company users never share a route tree —
+  // per architecture-Migration-Super-Admin-Administration.md's Navigation
+  // section, "The Platform menu must never appear for Company Users," and
+  // symmetrically a Company User has no business in /administration.
+  if (session.user.userType === "PLATFORM" && !isPlatformAllowedRoute(pathname)) {
+    return NextResponse.redirect(new URL(ADMINISTRATION_PREFIX, request.url));
+  }
+  if (session.user.userType === "COMPANY" && pathname.startsWith(ADMINISTRATION_PREFIX)) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

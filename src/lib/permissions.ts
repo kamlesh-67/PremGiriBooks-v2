@@ -1,16 +1,25 @@
 import { cache } from "react";
 
 import { prisma } from "@/lib/prisma";
-import { AuthorizationError, type CurrentUser } from "@/lib/current-user";
+import { AuthorizationError, getCurrentCompanyUser, type CompanyCurrentUser } from "@/lib/current-user";
 
 /**
+ * Only ever called for a CompanyCurrentUser — a PLATFORM user (Super Admin)
+ * has no Role/company and bypasses this entirely via assertSuperAdmin()
+ * (Permanent Architecture Principle 9: no platform.* permission catalog).
+ *
+ * Filters by companyId as well as role name — Role.name is only unique
+ * *per company* now (architecture-Migration-Super-Admin-Administration's
+ * per-company role split), so a name-only lookup would ambiguously match
+ * another company's identically-named role.
+ *
  * Defaults to deny on any missing data — unknown module/action, a role with
  * no matching RolePermission row, or (deliberately) a deactivated role. A
  * deactivated role's existing users keep functioning under it per
  * 11-role-permissions.md ("those users keep their existing role
  * assignment"), so this does not additionally filter by role.isActive —
  * doing so would silently revoke a still-assigned user's access the moment
- * an Administrator hides the role from future selection, which is a
+ * a Company Admin hides the role from future selection, which is a
  * different, stronger action than the spec describes.
  *
  * cache()-wrapped so multiple permission checks for the same
@@ -22,14 +31,14 @@ import { AuthorizationError, type CurrentUser } from "@/lib/current-user";
  * is itself cache()-wrapped per request.
  */
 export const hasPermission = cache(
-  async (user: CurrentUser, module: string, action: string): Promise<boolean> => {
+  async (user: CompanyCurrentUser, module: string, action: string): Promise<boolean> => {
     if (!module || !action) {
       return false;
     }
 
     const match = await prisma.rolePermission.findFirst({
       where: {
-        role: { name: user.role },
+        role: { name: user.role, companyId: user.companyId },
         permission: { module, action },
       },
       select: { id: true },
@@ -40,7 +49,7 @@ export const hasPermission = cache(
 );
 
 export async function assertPermission(
-  user: CurrentUser,
+  user: CompanyCurrentUser,
   module: string,
   action: string
 ): Promise<void> {
@@ -48,4 +57,21 @@ export async function assertPermission(
   if (!allowed) {
     throw new AuthorizationError(`You do not have permission to ${action} ${module}.`);
   }
+}
+
+/**
+ * Coarse nav/page-visibility gate for pages that used to call the removed
+ * isCurrentUserAdmin() (Masters/Settings/Company/User/Role Management hub
+ * pages and the Sidebar's adminOnly nav filter) — replaced with a real
+ * permission check instead of a role-name compare, per Permanent
+ * Architecture Principle 1/2. "settings"/"view" is granted to the
+ * Company Admin role's full catalog coverage and to no other reserved
+ * role's starting permission set, so this preserves today's exact
+ * behavior (only a Company Admin sees these) without hardcoding a name.
+ * Only ever called on a route already guaranteed to be COMPANY-only by
+ * proxy.ts.
+ */
+export async function isCurrentUserCompanyAdmin(): Promise<boolean> {
+  const user = await getCurrentCompanyUser();
+  return hasPermission(user, "settings", "view");
 }

@@ -74,7 +74,9 @@ export function TopNavbar() {
                 <DropdownMenuGroup>
                   <DropdownMenuLabel className="flex flex-col gap-0.5">
                     <span className="text-sm font-medium">{user.fullName}</span>
-                    <span className="text-xs font-normal text-muted-foreground">{user.role}</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {user.userType === "PLATFORM" ? "Super Admin" : user.role}
+                    </span>
                   </DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />

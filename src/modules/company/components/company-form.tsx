@@ -41,6 +41,7 @@ interface CompanyFormProps {
   defaultValues?: Partial<CompanyInput>;
   onSubmit: (data: CompanyInput) => Promise<ActionResult<CompanyWithSettings>>;
   submitLabel: string;
+  redirectPath?: string;
 }
 
 const BASE_DEFAULT_VALUES: CompanyInput = {
@@ -52,7 +53,12 @@ const BASE_DEFAULT_VALUES: CompanyInput = {
   decimalPlaces: 2,
 };
 
-export function CompanyForm({ defaultValues, onSubmit, submitLabel }: CompanyFormProps) {
+export function CompanyForm({
+  defaultValues,
+  onSubmit,
+  submitLabel,
+  redirectPath = "/company",
+}: CompanyFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -70,7 +76,7 @@ export function CompanyForm({ defaultValues, onSubmit, submitLabel }: CompanyFor
 
     if (result.success) {
       toast.success("Company saved successfully.");
-      router.push("/company");
+      router.push(redirectPath);
       router.refresh();
       return;
     }
@@ -408,7 +414,7 @@ export function CompanyForm({ defaultValues, onSubmit, submitLabel }: CompanyFor
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/company")}
+            onClick={() => router.push(redirectPath)}
             disabled={isSubmitting}
           >
             Cancel

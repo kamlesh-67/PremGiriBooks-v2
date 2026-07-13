@@ -1,17 +1,36 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type Role } from "@prisma/client";
 
 import { AppError } from "@/lib/app-error";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { COMPANY_ADMIN_ROLE_NAME } from "@/constants/roles";
+import { isFullCoverageRole } from "@/modules/roles/utils/role-coverage";
 import type { UserProfileFields } from "@/modules/users/utils/normalize-user-input";
 import { isRetryableTransactionError } from "@/modules/users/utils/prisma-errors";
 import type {
+  CompanyAdminSummary,
   CreateUserResult,
   DeactivateUserResult,
   UpdateUserResult,
   UserListFilters,
   UserWithRole,
 } from "@/types/user";
+
+// Every row this repository returns belongs to a COMPANY-type user, which
+// always has a companyId and a Role by construction (userService.createUser/
+// updateUser only ever assign a real, company-scoped roleId) — the schema
+// types these as nullable only to support PLATFORM users, which this module
+// never touches. Null here would be a genuine data-integrity bug, not a
+// normal business outcome, so this throws rather than returning a fuzzy
+// result.
+function assertHasRole<T extends { role: Role | null; companyId: string | null }>(
+  user: T
+): T & { role: Role; companyId: string } {
+  if (!user.role || !user.companyId) {
+    throw new AppError("Data integrity error: a company user must have a company and a role assigned.");
+  }
+  return user as T & { role: Role; companyId: string };
+}
 
 const SAFE_INCLUDE = { role: true } as const;
 const SAFE_OMIT = { passwordHash: true } as const;
@@ -74,24 +93,26 @@ function buildWhere(companyId: string, filters: UserListFilters): Prisma.UserWhe
 }
 
 export const userRepository = {
-  findMany(companyId: string, filters: UserListFilters): Promise<UserWithRole[]> {
-    return prisma.user.findMany({
+  async findMany(companyId: string, filters: UserListFilters): Promise<UserWithRole[]> {
+    const users = await prisma.user.findMany({
       where: buildWhere(companyId, filters),
       include: SAFE_INCLUDE,
       omit: SAFE_OMIT,
       orderBy: { fullName: "asc" },
     });
+    return users.map(assertHasRole);
   },
 
   // Callers must always treat "found but belongs to a different company" the
   // same as "not found" — findById on its own does not enforce tenant
   // isolation, since the caller's own companyId isn't known at this layer.
-  findById(id: string): Promise<UserWithRole | null> {
-    return prisma.user.findUnique({
+  async findById(id: string): Promise<UserWithRole | null> {
+    const user = await prisma.user.findUnique({
       where: { id },
       include: SAFE_INCLUDE,
       omit: SAFE_OMIT,
     });
+    return user ? assertHasRole(user) : null;
   },
 
   // The only two places passwordHash is allowed to leave this file's own
@@ -104,55 +125,79 @@ export const userRepository = {
     return user?.passwordHash ?? null;
   },
 
-  async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
-    await prisma.user.update({ where: { id }, data: { passwordHash } });
+  async updatePasswordHash(
+    id: string,
+    passwordHash: string,
+    client: Prisma.TransactionClient | typeof prisma = prisma
+  ): Promise<void> {
+    await client.user.update({ where: { id }, data: { passwordHash } });
   },
 
   /**
-   * Checks the selected role's existence and active status inside the same
-   * Serializable transaction as the insert, closing the TOCTOU window a
-   * separate pre-write check in the service layer left open: without this,
-   * a role could be deactivated by another request in the gap between
-   * userService.createUser's check and this write, letting a brand-new user
-   * end up assigned to an inactive role despite the check having passed.
+   * Checks the selected role's existence, active status, and — new for the
+   * per-company role split — that it actually belongs to `companyId`
+   * (previously unnecessary, since Role was a single global table; now a
+   * client-supplied roleId from another company must be rejected the same
+   * way an inactive one is) inside the same Serializable transaction as the
+   * insert, closing the TOCTOU window a separate pre-write check in the
+   * service layer left open: without this, a role could be deactivated by
+   * another request in the gap between userService.createUser's check and
+   * this write, letting a brand-new user end up assigned to an inactive
+   * role despite the check having passed.
+   *
+   * Accepts an optional external transaction client, mirroring the exact
+   * convention ledgerRepository.update()/companyRepository.create() already
+   * use — companyService.createCompany() calls this from inside its own
+   * transaction so the brand-new Company Admin User row commits (or rolls
+   * back) atomically with the Company/Role/FinancialYear/Ledger rows.
+   * Defaults to opening its own Serializable-isolation + withRetry
+   * transaction for every other (non-transactional) caller, unchanged from
+   * before.
    */
   create(
     companyId: string,
     profile: UserProfileFields,
-    passwordHash: string
+    passwordHash: string,
+    externalTx?: Prisma.TransactionClient
   ): Promise<CreateUserResult> {
-    return withRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const role = await tx.role.findUnique({ where: { id: profile.roleId } });
-        if (!role) {
-          return { status: "invalid_role" };
-        }
-        if (!role.isActive) {
-          return { status: "inactive_role" };
-        }
+    const run = async (tx: Prisma.TransactionClient): Promise<CreateUserResult> => {
+      const role = await tx.role.findUnique({ where: { id: profile.roleId } });
+      if (!role || role.companyId !== companyId) {
+        return { status: "invalid_role" };
+      }
+      if (!role.isActive) {
+        return { status: "inactive_role" };
+      }
 
-        const user = await tx.user.create({
-          data: { ...profile, passwordHash, companyId },
-          include: SAFE_INCLUDE,
-          omit: SAFE_OMIT,
-        });
+      const user = await tx.user.create({
+        data: { ...profile, passwordHash, companyId },
+        include: SAFE_INCLUDE,
+        omit: SAFE_OMIT,
+      });
 
-        return { status: "ok", user };
-      }, SERIALIZABLE)
-    );
+      return { status: "ok", user: assertHasRole(user) };
+    };
+
+    if (externalTx) {
+      return run(externalTx);
+    }
+    return withRetry(() => prisma.$transaction(run, SERIALIZABLE));
   },
 
   /**
    * Bundles four things into one Serializable transaction: the
    * tenant-isolation check (the target must belong to `companyId`), the
-   * profile/password write, and the "at least one active Administrator must
-   * remain" guard — the same invariant `deactivate()` enforces, applied here
-   * because reassigning an Administrator's role away from Administrator has
-   * the identical effect (zero active Administrators left) without ever
-   * going through the dedicated deactivate path. Serializable + withRetry
-   * closes the write-skew race where two concurrent role-reassignments away
-   * from Administrator could each see the other's Administrator row as
-   * still-active and both pass the count check.
+   * profile/password write, and the "at least one active user holding a
+   * full-coverage role must remain" guard — the same invariant
+   * `deactivate()` enforces, applied here because reassigning a
+   * full-coverage user's role away from full coverage has the identical
+   * effect (zero such active users left) without ever going through the
+   * dedicated deactivate path. This is name-independent (isFullCoverageRole
+   * checks permission count, not "is this role named Company Admin") —
+   * see role-coverage.ts. Serializable + withRetry closes the write-skew
+   * race where two concurrent role-reassignments away from full coverage
+   * could each see the other's row as still-active and both pass the count
+   * check.
    */
   async updateProfile(
     id: string,
@@ -162,14 +207,15 @@ export const userRepository = {
   ): Promise<UpdateUserResult> {
     return withRetry(() =>
       prisma.$transaction(async (tx) => {
-        const existing = await tx.user.findUnique({
+        const existingRaw = await tx.user.findUnique({
           where: { id },
           include: SAFE_INCLUDE,
           omit: SAFE_OMIT,
         });
-        if (!existing || existing.companyId !== companyId) {
+        if (!existingRaw || existingRaw.companyId !== companyId) {
           return { status: "not_found" };
         }
+        const existing = assertHasRole(existingRaw);
 
         // Only checked when the role is actually changing — a no-op
         // resubmission of the user's own already-inactive role (the Edit
@@ -180,7 +226,7 @@ export const userRepository = {
         // close the identical TOCTOU window documented on create() above.
         if (profile.roleId !== existing.roleId) {
           const newRole = await tx.role.findUnique({ where: { id: profile.roleId } });
-          if (!newRole) {
+          if (!newRole || newRole.companyId !== companyId) {
             return { status: "invalid_role" };
           }
           if (!newRole.isActive) {
@@ -188,23 +234,19 @@ export const userRepository = {
           }
         }
 
-        const losesAdministratorRole =
+        const losesFullCoverage =
           existing.isActive &&
-          existing.role.name === "Administrator" &&
-          profile.roleId !== existing.roleId;
+          profile.roleId !== existing.roleId &&
+          (await isFullCoverageRole(tx, existing.role.id));
 
-        if (losesAdministratorRole) {
-          const otherActiveAdministrators = await tx.user.count({
-            where: {
-              companyId: existing.companyId,
-              roleId: existing.roleId,
-              isActive: true,
-              id: { not: id },
-            },
-          });
-
-          if (otherActiveAdministrators === 0) {
-            return { status: "last_administrator" };
+        if (losesFullCoverage) {
+          const stillHasOtherFullCoverageUser = await hasOtherActiveFullCoverageUser(
+            tx,
+            companyId,
+            id
+          );
+          if (!stillHasOtherFullCoverageUser) {
+            return { status: "last_active_admin" };
           }
         }
 
@@ -215,7 +257,7 @@ export const userRepository = {
           omit: SAFE_OMIT,
         });
 
-        return { status: "ok", user: updated };
+        return { status: "ok", user: assertHasRole(updated) };
       }, SERIALIZABLE)
     );
   },
@@ -227,27 +269,85 @@ export const userRepository = {
         return null;
       }
 
-      return tx.user.update({
+      const updated = await tx.user.update({
         where: { id },
         data: { isActive },
         include: SAFE_INCLUDE,
         omit: SAFE_OMIT,
       });
+      return assertHasRole(updated);
     });
+  },
+
+  // The two Platform-only (cross-company) exceptions to this repository's
+  // "every method takes companyId" rule — reads/writes any Company Admin
+  // regardless of which company they belong to, for the Administration
+  // module's Company Admins screen. Gated by assertSuperAdmin() one layer
+  // up, in platform-user-service.ts, never here (Permanent Architecture
+  // Principle 3 — repositories never perform authorization).
+  async findAllCompanyAdmins(): Promise<CompanyAdminSummary[]> {
+    const users = await prisma.user.findMany({
+      where: { userType: "COMPANY", role: { isProtected: true, name: COMPANY_ADMIN_ROLE_NAME } },
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        email: true,
+        isActive: true,
+        companyId: true,
+        company: { select: { companyName: true } },
+      },
+      orderBy: { fullName: "asc" },
+    });
+
+    return users
+      .filter((user): user is typeof user & { companyId: string; company: { companyName: string } } =>
+        Boolean(user.companyId && user.company)
+      )
+      .map((user) => ({
+        id: user.id,
+        username: user.username,
+        fullName: user.fullName,
+        email: user.email,
+        isActive: user.isActive,
+        companyId: user.companyId,
+        companyName: user.company.companyName,
+      }));
+  },
+
+  async setActiveById(
+    id: string,
+    isActive: boolean,
+    client: Prisma.TransactionClient | typeof prisma = prisma
+  ): Promise<UserWithRole | null> {
+    try {
+      const updated = await client.user.update({
+        where: { id },
+        data: { isActive },
+        include: SAFE_INCLUDE,
+        omit: SAFE_OMIT,
+      });
+      return assertHasRole(updated);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        return null;
+      }
+      throw error;
+    }
   },
 
   /**
    * Deactivation bundles the tenant-isolation check, the "last active
-   * Administrator" check, and the "not self" business-rule check into the
-   * same Serializable transaction as the write. Serializable + withRetry
-   * closes the write-skew race two independent count-then-write queries
-   * would otherwise leave open — e.g. two Administrators, X and Y,
-   * deactivating each other at nearly the same moment: under plain Read
-   * Committed each transaction's count would see the other still active and
-   * both would pass, leaving zero active Administrators. Serializable
-   * isolation makes Postgres abort one of the two with a write-skew
-   * conflict, which withRetry surfaces as "please try again" rather than
-   * silently allowing it.
+   * full-coverage user" check, and the "not self" business-rule check into
+   * the same Serializable transaction as the write. Serializable +
+   * withRetry closes the write-skew race two independent count-then-write
+   * queries would otherwise leave open — e.g. two full-coverage users, X
+   * and Y, deactivating each other at nearly the same moment: under plain
+   * Read Committed each transaction's count would see the other still
+   * active and both would pass, leaving zero active full-coverage users.
+   * Serializable isolation makes Postgres abort one of the two with a
+   * write-skew conflict, which withRetry surfaces as "please try again"
+   * rather than silently allowing it.
    */
   async deactivate(
     id: string,
@@ -256,31 +356,29 @@ export const userRepository = {
   ): Promise<DeactivateUserResult> {
     return withRetry(() =>
       prisma.$transaction(async (tx) => {
-        const user = await tx.user.findUnique({
+        const userRaw = await tx.user.findUnique({
           where: { id },
           include: SAFE_INCLUDE,
           omit: SAFE_OMIT,
         });
-        if (!user || user.companyId !== companyId) {
+        if (!userRaw || userRaw.companyId !== companyId) {
           return { status: "not_found" };
         }
+        const user = assertHasRole(userRaw);
 
         if (id === requestedById) {
           return { status: "self" };
         }
 
-        if (user.isActive && user.role.name === "Administrator") {
-          const otherActiveAdministrators = await tx.user.count({
-            where: {
-              companyId: user.companyId,
-              roleId: user.roleId,
-              isActive: true,
-              id: { not: id },
-            },
-          });
+        if (user.isActive && (await isFullCoverageRole(tx, user.role.id))) {
+          const stillHasOtherFullCoverageUser = await hasOtherActiveFullCoverageUser(
+            tx,
+            user.companyId,
+            id
+          );
 
-          if (otherActiveAdministrators === 0) {
-            return { status: "last_administrator" };
+          if (!stillHasOtherFullCoverageUser) {
+            return { status: "last_active_admin" };
           }
         }
 
@@ -291,8 +389,35 @@ export const userRepository = {
           omit: SAFE_OMIT,
         });
 
-        return { status: "ok", user: updated };
+        return { status: "ok", user: assertHasRole(updated) };
       }, SERIALIZABLE)
     );
   },
 };
+
+/**
+ * Whether at least one *other* active user in the company holds a
+ * full-coverage role (excluding `excludeUserId`) — the user-level half of
+ * the same structural, name-independent invariant role-coverage.ts's
+ * hasOtherActiveFullCoverageRole enforces at the role level. In practice
+ * this always protects the Company Admin seat, since that role is always
+ * full-coverage and can never itself be deactivated (isProtected) — but
+ * the check itself never compares a role's name.
+ */
+async function hasOtherActiveFullCoverageUser(
+  tx: Prisma.TransactionClient,
+  companyId: string,
+  excludeUserId: string
+): Promise<boolean> {
+  const totalPermissions = await tx.permission.count();
+  if (totalPermissions === 0) {
+    return true;
+  }
+
+  const otherActiveUsers = await tx.user.findMany({
+    where: { companyId, isActive: true, id: { not: excludeUserId } },
+    select: { role: { select: { _count: { select: { permissions: true } } } } },
+  });
+
+  return otherActiveUsers.some((u) => u.role?._count.permissions === totalPermissions);
+}

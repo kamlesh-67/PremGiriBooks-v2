@@ -17,15 +17,32 @@ import {
 import {
   activateCompanyAction,
   deactivateCompanyAction,
-} from "@/modules/company/actions/company-actions";
+} from "@/modules/administration/actions/company-admin-actions";
 import { CompanyStatusBadge } from "@/modules/company/components/company-status-badge";
 import type { CompanyWithSettings } from "@/types/company";
 
 interface CompanyTableProps {
   companies: CompanyWithSettings[];
+  // Activate/Deactivate (and the empty-state "Create Company" CTA) call
+  // companyService.activateCompany/deactivateCompany, which assert
+  // getCurrentSuperAdmin() — genuinely Super-Admin-only Platform
+  // operations, so false by default.
+  canManageStatus?: boolean;
+  // Editing is NOT Super-Admin-only: /company/[id]/edit is the Company
+  // Admin's own operational-settings screen (theme/date format/currency/
+  // logo), separate from Super Admin's legal/business info screen at
+  // /administration/companies/[id]/edit. Callers pass their own
+  // editBasePath so this one prop works for both routes.
+  canEdit?: boolean;
+  editBasePath?: string;
 }
 
-export function CompanyTable({ companies }: CompanyTableProps) {
+export function CompanyTable({
+  companies,
+  canManageStatus = false,
+  canEdit = false,
+  editBasePath = "/administration/companies",
+}: CompanyTableProps) {
   const [pendingId, setPendingId] = React.useState<string | null>(null);
 
   async function handleToggleActive(company: CompanyWithSettings) {
@@ -46,11 +63,13 @@ export function CompanyTable({ companies }: CompanyTableProps) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-16 text-center">
         <p className="text-sm text-muted-foreground">No companies found.</p>
-        <Button
-          size="sm"
-          nativeButton={false}
-          render={<Link href="/company/new">Create Company</Link>}
-        />
+        {canManageStatus && (
+          <Button
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/administration/companies/new">Create Company</Link>}
+          />
+        )}
       </div>
     );
   }
@@ -63,7 +82,9 @@ export function CompanyTable({ companies }: CompanyTableProps) {
           <TableHead>GSTIN</TableHead>
           <TableHead>Mobile Number</TableHead>
           <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          {(canEdit || canManageStatus) && (
+            <TableHead className="text-right">Actions</TableHead>
+          )}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -82,29 +103,38 @@ export function CompanyTable({ companies }: CompanyTableProps) {
             <TableCell>
               <CompanyStatusBadge isActive={company.isActive} />
             </TableCell>
-            <TableCell className="text-right">
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  nativeButton={false}
-                  render={
-                    <Link href={`/company/${company.id}/edit`} aria-label="Edit company">
-                      <Pencil size={16} />
-                    </Link>
-                  }
-                />
+            {(canEdit || canManageStatus) && (
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  {canEdit && (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      nativeButton={false}
+                      render={
+                        <Link
+                          href={`${editBasePath}/${company.id}/edit`}
+                          aria-label="Edit company"
+                        >
+                          <Pencil size={16} />
+                        </Link>
+                      }
+                    />
+                  )}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={pendingId === company.id}
-                  onClick={() => handleToggleActive(company)}
-                >
-                  {company.isActive ? "Deactivate" : "Activate"}
-                </Button>
-              </div>
-            </TableCell>
+                  {canManageStatus && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pendingId === company.id}
+                      onClick={() => handleToggleActive(company)}
+                    >
+                      {company.isActive ? "Deactivate" : "Activate"}
+                    </Button>
+                  )}
+                </div>
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>

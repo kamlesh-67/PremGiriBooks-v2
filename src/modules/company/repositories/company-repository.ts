@@ -75,9 +75,17 @@ export const companyRepository = {
     }
   },
 
-  async setActive(id: string, isActive: boolean): Promise<CompanyWithSettings | null> {
+  // Accepts an optional transaction client so companyService.activateCompany/
+  // deactivateCompany can commit this status change atomically with the
+  // AuditLog row that records it — a failure in either rolls both back
+  // instead of leaving an unaudited state change.
+  async setActive(
+    id: string,
+    isActive: boolean,
+    client: PrismaClientOrTransaction = prisma
+  ): Promise<CompanyWithSettings | null> {
     try {
-      return await prisma.company.update({
+      return await client.company.update({
         where: { id },
         data: { isActive },
         include: { settings: true },

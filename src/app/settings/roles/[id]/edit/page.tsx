@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { PermissionMatrix } from "@/modules/roles/components/permission-matrix";
 import { RoleEditForm } from "@/modules/roles/components/role-edit-form";
 import { permissionService } from "@/modules/roles/services/permission-service";
@@ -12,7 +12,7 @@ interface EditRolePageProps {
 }
 
 export default async function EditRolePage({ params }: EditRolePageProps) {
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
   if (!isAdmin) {
     redirect("/settings/roles");
   }

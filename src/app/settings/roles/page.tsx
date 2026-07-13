@@ -4,12 +4,12 @@ import { Plus } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { roleService } from "@/modules/roles/services/role-service";
 import { RoleTable } from "@/modules/roles/components/role-table";
 
 export default async function RoleListPage() {
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
   if (!isAdmin) {
     redirect("/");
   }

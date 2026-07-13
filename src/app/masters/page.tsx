@@ -4,7 +4,7 @@ import { Building2, CalendarRange } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 
 const MASTERS_MODULES = [
   {
@@ -22,7 +22,7 @@ const MASTERS_MODULES = [
 ] as const;
 
 export default async function MastersPage() {
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
   if (!isAdmin) {
     redirect("/");
   }

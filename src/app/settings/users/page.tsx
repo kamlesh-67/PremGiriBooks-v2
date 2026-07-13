@@ -4,7 +4,8 @@ import { Plus } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser, isCurrentUserAdmin } from "@/lib/current-user";
+import { getCurrentUser } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { userService } from "@/modules/users/services/user-service";
 import { UserSearchForm } from "@/modules/users/components/user-search-form";
 import { UserTable } from "@/modules/users/components/user-table";
@@ -14,7 +15,7 @@ interface UserListPageProps {
 }
 
 export default async function UserListPage({ searchParams }: UserListPageProps) {
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
   if (!isAdmin) {
     redirect("/");
   }

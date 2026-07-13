@@ -1,5 +1,6 @@
 import { AppError } from "@/lib/app-error";
-import { assertAdministrator, getCurrentUser } from "@/lib/current-user";
+import { getCurrentUser, getCurrentCompanyUser } from "@/lib/current-user";
+import { assertPermission } from "@/lib/permissions";
 import { financialYearRepository } from "@/modules/financial-year/repositories/financial-year-repository";
 import { normalizeFinancialYearInput } from "@/modules/financial-year/utils/normalize-financial-year-input";
 import {
@@ -11,7 +12,7 @@ import type { CloseFinancialYearResult, FinancialYear } from "@/types/financial-
 export const financialYearService = {
   async listFinancialYears(companyId: string): Promise<FinancialYear[]> {
     const user = await getCurrentUser();
-    if (user.role !== "Administrator" && user.companyId !== companyId) {
+    if (user.userType !== "PLATFORM" && user.companyId !== companyId) {
       return [];
     }
 
@@ -30,7 +31,7 @@ export const financialYearService = {
     }
 
     const user = await getCurrentUser();
-    if (user.role !== "Administrator" && user.companyId !== financialYear.companyId) {
+    if (user.userType !== "PLATFORM" && user.companyId !== financialYear.companyId) {
       return null;
     }
 
@@ -38,16 +39,22 @@ export const financialYearService = {
   },
 
   async createFinancialYear(companyId: string, input: FinancialYearInput): Promise<FinancialYear> {
-    await assertAdministrator();
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "financial-year", "create");
+    if (user.companyId !== companyId) {
+      throw new AppError("Financial year not found.");
+    }
+
     const data = normalizeFinancialYearInput(financialYearSchema.parse(input));
     return financialYearRepository.create(companyId, data);
   },
 
   async updateFinancialYear(id: string, input: FinancialYearInput): Promise<FinancialYear> {
-    await assertAdministrator();
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "financial-year", "edit");
 
     const existing = await financialYearRepository.findById(id);
-    if (!existing) {
+    if (!existing || existing.companyId !== user.companyId) {
       throw new AppError("Financial year not found.");
     }
     if (existing.isClosed) {
@@ -63,10 +70,11 @@ export const financialYearService = {
   },
 
   async setCurrent(id: string): Promise<FinancialYear> {
-    await assertAdministrator();
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "financial-year", "edit");
 
     const financialYear = await financialYearRepository.findById(id);
-    if (!financialYear) {
+    if (!financialYear || financialYear.companyId !== user.companyId) {
       throw new AppError("Financial year not found.");
     }
     if (financialYear.isClosed) {
@@ -77,10 +85,11 @@ export const financialYearService = {
   },
 
   async closeFinancialYear(id: string): Promise<CloseFinancialYearResult> {
-    await assertAdministrator();
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "financial-year", "edit");
 
     const financialYear = await financialYearRepository.findById(id);
-    if (!financialYear) {
+    if (!financialYear || financialYear.companyId !== user.companyId) {
       throw new AppError("Financial year not found.");
     }
     if (financialYear.isClosed) {

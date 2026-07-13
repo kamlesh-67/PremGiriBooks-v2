@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { getCurrentCompany } from "@/lib/current-company";
 import { getCurrentFinancialYear } from "@/lib/current-financial-year";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 
 export default async function Home() {
   const company = await getCurrentCompany();
@@ -18,7 +18,7 @@ export default async function Home() {
     redirect("/financial-year/select");
   }
 
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
 
   return (
     <AppShell isAdmin={isAdmin}>
