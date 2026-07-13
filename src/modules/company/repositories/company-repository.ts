@@ -5,6 +5,8 @@ import type { CompanyPersistData } from "@/modules/company/utils/normalize-compa
 import { isRecordNotFoundError } from "@/modules/company/utils/prisma-errors";
 import type { CompanyListFilters, CompanyWithSettings } from "@/types/company";
 
+type PrismaClientOrTransaction = typeof prisma | Prisma.TransactionClient;
+
 function buildWhere(filters: CompanyListFilters): Prisma.CompanyWhereInput {
   const where: Prisma.CompanyWhereInput = {};
 
@@ -41,8 +43,15 @@ export const companyRepository = {
     });
   },
 
-  create(data: CompanyPersistData): Promise<CompanyWithSettings> {
-    return prisma.company.create({
+  // Accepts an optional transaction client so companyService.createCompany()
+  // can run this as one step of a larger atomic unit of work (seeding the
+  // default ledger group skeleton right after) — defaults to the plain
+  // client for every other, non-transactional caller.
+  create(
+    data: CompanyPersistData,
+    client: PrismaClientOrTransaction = prisma
+  ): Promise<CompanyWithSettings> {
+    return client.company.create({
       data: {
         ...data,
         settings: { create: {} },
