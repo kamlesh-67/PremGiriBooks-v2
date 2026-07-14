@@ -61,3 +61,36 @@ three components.
 
 After the fix: `npx tsc --noEmit` clean, `npx eslint src prisma` clean, `npx vitest run` 20/20
 passing, `next build` succeeds (all three `/accounting/expense-heads` routes still in the route table).
+
+---
+
+## Round 2 (same day) — follow-up finding on the Finding 1 fix itself
+
+### Finding 3 — `runLedgerAction` misreports a committed mutation as failed when revalidation throws — VERIFIED VALID, FIXED
+
+**Claim:** in `run-ledger-action.ts`, `operation()` and the `revalidatePath` loop shared one
+try/catch — so a `revalidatePath` throw *after* the mutation had already committed returned
+`{ success: false }`, presenting persisted work as failed (and, since a raw `Error` isn't an
+`AppError`, also logging it as an "Unhandled Server Action error" and showing the generic retry
+message — inviting a retry of work that succeeded).
+
+**Verified:** true as described — the single try block wrapped both phases.
+
+**Fix (`src/modules/ledgers/actions/run-ledger-action.ts`):** the two failure modes are now handled
+separately. `operation()` keeps its existing catch → `toActionErrorMessage` failure envelope,
+unchanged. Revalidation runs after it in its own per-path try/catch: a throw is logged server-side
+via the shared Pino logger (`logger.warn({ err, path }, ...)`, matching `toActionErrorMessage`'s
+structured-logging convention), the remaining paths are still attempted, and the action returns
+`{ success: true, data }` — the affected screens simply serve cached data until their next natural
+revalidation. Behavior for every pre-existing path (operation success, operation failure) is
+byte-for-byte identical.
+
+**Coverage added (`run-ledger-action.test.ts`, 3 tests, per the finding's explicit ask):** success
+revalidates every path; an operation throw returns the failure envelope without revalidating; a
+successful operation followed by `revalidatePath` throwing still returns success, logs one warning,
+and continues revalidating the remaining paths. `next/cache` and `@/lib/logger` are mocked.
+
+### Round 2 validation
+
+`npx vitest run` 23/23 passing (20 prior + 3 new), `npx tsc --noEmit` clean,
+`npx eslint src prisma` clean, `next build` succeeds.
