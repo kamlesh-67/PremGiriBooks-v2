@@ -17,9 +17,14 @@ export type DeactivateRoleResult =
   | { status: "protected" }
   | { status: "last_full_coverage_role" };
 
+// "protected" and "missing_mandatory_permissions" are deliberately absent —
+// permissionRepository.assignToRole() only ever returns the statuses below.
+// Both those checks (Company Admin's permission set is immutable; a
+// protected role can't drop its mandatory pairs) already run earlier, in
+// permission-service.ts's setRolePermissions(), before the repository is
+// ever called — they'd be unreachable dead code here, not a real
+// defense-in-depth duplicate.
 export type AssignPermissionsResult =
   | { status: "ok" }
   | { status: "not_found" }
-  | { status: "protected" }
-  | { status: "missing_mandatory_permissions"; missing: PermissionPair[] }
   | { status: "last_full_coverage_role" };

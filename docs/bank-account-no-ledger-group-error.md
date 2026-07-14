@@ -87,33 +87,94 @@ script is the one that's incomplete.
 Run a one-off script against the affected company (replace the id lookup if
 you have more than one company, or already know the id):
 
+**Note:** an earlier version of this script aborted whenever the company had *any* existing
+`LedgerGroup` rows at all (`existingGroups > 0`), on the theory that `seedDefaults()` isn't
+idempotent. That refuses to fix the exact case described above in "Root cause" — a company with
+some custom groups (e.g. `Purchase`, `Test`, `Test2`) but none of the 23 reserved defaults, since
+it can't distinguish "already fully seeded" from "partially populated, still missing Bank
+Accounts." The version below reconciles by **name** instead: it reads the company's existing
+`LedgerGroup` names into a set and creates only the `DEFAULT_LEDGER_GROUPS` entries not already
+present, in two passes (parents, then children) matching `ledgerGroupRepository.seedDefaults()`'s
+own ordering, and only creates the default "Cash" ledger if one doesn't already exist by name.
+
 ```ts
 // scripts/seed-missing-ledger-groups.ts
 import { prisma } from "../src/lib/prisma";
-import { ledgerGroupService } from "../src/modules/ledger-groups/services/ledger-group-service";
-import { ledgerService } from "../src/modules/ledgers/services/ledger-service";
+import { DEFAULT_LEDGER_GROUPS } from "../src/modules/ledger-groups/constants/default-groups";
 
 async function main() {
   const company = await prisma.company.findFirstOrThrow({
     where: { companyName: "Default Company" },
   });
 
-  const existingGroups = await prisma.ledgerGroup.count({
-    where: { companyId: company.id },
-  });
-  if (existingGroups > 0) {
-    throw new Error(
-      `Company ${company.id} already has ${existingGroups} ledger group(s) — ` +
-      "seedDefaultGroups() is not idempotent, aborting to avoid duplicates."
-    );
-  }
-
   await prisma.$transaction(async (tx) => {
-    await ledgerGroupService.seedDefaultGroups(company.id, tx);
-    await ledgerService.seedDefaultLedger(company.id, tx);
+    const existing = await tx.ledgerGroup.findMany({
+      where: { companyId: company.id },
+      select: { id: true, name: true },
+    });
+    const idByName = new Map(existing.map((group) => [group.name, group.id]));
+
+    // Pass 1 — top-level groups (parent: null). Every DEFAULT_LEDGER_GROUPS
+    // child references a top-level group's name, so parents must exist first.
+    for (const seed of DEFAULT_LEDGER_GROUPS.filter((g) => g.parent === null)) {
+      if (idByName.has(seed.name)) continue;
+      const created = await tx.ledgerGroup.create({
+        data: {
+          companyId: company.id,
+          name: seed.name,
+          parentGroupId: null,
+          natureType: seed.nature,
+          affectsGrossProfit: seed.affectsGrossProfit,
+          isSystemDefined: true,
+        },
+      });
+      idByName.set(seed.name, created.id);
+    }
+
+    // Pass 2 — child groups.
+    for (const seed of DEFAULT_LEDGER_GROUPS.filter((g) => g.parent !== null)) {
+      if (idByName.has(seed.name)) continue;
+      const parentId = idByName.get(seed.parent as string);
+      if (!parentId) {
+        throw new Error(`Seed data error: parent group "${seed.parent}" was not found.`);
+      }
+      const created = await tx.ledgerGroup.create({
+        data: {
+          companyId: company.id,
+          name: seed.name,
+          parentGroupId: parentId,
+          natureType: seed.nature,
+          affectsGrossProfit: seed.affectsGrossProfit,
+          isSystemDefined: true,
+        },
+      });
+      idByName.set(seed.name, created.id);
+    }
+
+    // Default "Cash" ledger — only create it if one doesn't already exist by name.
+    const cashLedgerExists = await tx.ledger.findFirst({
+      where: { companyId: company.id, name: "Cash" },
+      select: { id: true },
+    });
+    if (!cashLedgerExists) {
+      const cashInHandId = idByName.get("Cash-in-Hand");
+      if (!cashInHandId) {
+        throw new Error('Seed data error: "Cash-in-Hand" group was not found for the Cash ledger.');
+      }
+      await tx.ledger.create({
+        data: {
+          companyId: company.id,
+          ledgerGroupId: cashInHandId,
+          name: "Cash",
+          openingBalance: 0,
+          openingBalanceType: "DEBIT",
+          isSystemDefined: true,
+        },
+      });
+    }
   });
 
-  console.log(`Seeded default ledger groups + Cash ledger for ${company.id}`);
+  console.log(`Reconciled default ledger groups + Cash ledger for ${company.id}`);
 }
 
 main()

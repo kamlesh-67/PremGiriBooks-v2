@@ -1,7 +1,7 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { PlatformShell } from "@/components/layout/platform-shell";
-import { isCurrentUserSuperAdmin } from "@/lib/current-user";
+import { requireSuperAdmin } from "@/lib/current-user";
 import { companyService } from "@/modules/company/services/company-service";
 import { CompanyEditForm } from "@/modules/company/components/company-edit-form";
 import { toCompanyFormValues } from "@/modules/company/utils/company-form-values";
@@ -11,12 +11,10 @@ interface EditCompanyPageProps {
 }
 
 // Legal/business info editing — Super-Admin-only, per the Company Module
-// split. Operational settings stay at /company/[id]/edit for Company Admin.
+// split. Operational settings + non-compliance profile fields stay at
+// /company/[id]/edit for Company Admin.
 export default async function AdministrationEditCompanyPage({ params }: EditCompanyPageProps) {
-  const isSuperAdmin = await isCurrentUserSuperAdmin();
-  if (!isSuperAdmin) {
-    redirect("/");
-  }
+  await requireSuperAdmin();
 
   const { id } = await params;
   const company = await companyService.getCompany(id);

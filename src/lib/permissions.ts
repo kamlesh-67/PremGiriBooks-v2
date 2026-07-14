@@ -13,14 +13,14 @@ import { AuthorizationError, getCurrentCompanyUser, type CompanyCurrentUser } fr
  * per-company role split), so a name-only lookup would ambiguously match
  * another company's identically-named role.
  *
- * Defaults to deny on any missing data — unknown module/action, a role with
- * no matching RolePermission row, or (deliberately) a deactivated role. A
+ * Deliberately does NOT additionally filter by role.isActive — a
  * deactivated role's existing users keep functioning under it per
  * 11-role-permissions.md ("those users keep their existing role
- * assignment"), so this does not additionally filter by role.isActive —
- * doing so would silently revoke a still-assigned user's access the moment
- * a Company Admin hides the role from future selection, which is a
- * different, stronger action than the spec describes.
+ * assignment"), so filtering here would silently revoke a still-assigned
+ * user's access the moment a Company Admin hides the role from future
+ * selection, which is a different, stronger action than the spec
+ * describes. Defaults to deny only for an unknown module/action or a role
+ * with no matching RolePermission row.
  *
  * cache()-wrapped so multiple permission checks for the same
  * (user, module, action) within one request/render pass — e.g. a page

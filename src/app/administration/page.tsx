@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Building2, ShieldCheck, KeyRound, Settings, ScrollText, DatabaseBackup } from "lucide-react";
 
 import { PlatformShell } from "@/components/layout/platform-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { isCurrentUserSuperAdmin } from "@/lib/current-user";
+import { requireSuperAdmin } from "@/lib/current-user";
 
 const ADMINISTRATION_MODULES = [
   {
@@ -46,10 +45,7 @@ const ADMINISTRATION_MODULES = [
 ] as const;
 
 export default async function AdministrationHubPage() {
-  const isSuperAdmin = await isCurrentUserSuperAdmin();
-  if (!isSuperAdmin) {
-    redirect("/");
-  }
+  await requireSuperAdmin();
 
   return (
     <PlatformShell>

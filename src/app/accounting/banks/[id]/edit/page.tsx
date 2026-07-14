@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { getCurrentCompanyUser } from "@/lib/current-user";
-import { hasPermission, isCurrentUserCompanyAdmin } from "@/lib/permissions";
+import { hasPermission } from "@/lib/permissions";
 import { bankAccountService } from "@/modules/bank-accounts/services/bank-account-service";
 import { BankAccountEditForm } from "@/modules/bank-accounts/components/bank-account-edit-form";
 
@@ -24,7 +24,11 @@ export default async function EditBankAccountPage({ params }: EditBankAccountPag
     notFound();
   }
 
-  const isAdmin = await isCurrentUserCompanyAdmin();
+  // Reuses the `user` already fetched above instead of calling
+  // isCurrentUserCompanyAdmin() (which would re-run getCurrentCompanyUser()
+  // a second time) — isCurrentUserCompanyAdmin() is itself just
+  // hasPermission(user, "settings", "view").
+  const isAdmin = await hasPermission(user, "settings", "view");
 
   return (
     <AppShell isAdmin={isAdmin}>

@@ -17,6 +17,7 @@ export const companyAdminSchema = z.object({
   email: z
     .string()
     .trim()
+    .toLowerCase()
     .min(1, "Email is required")
     .max(150, "Email is too long")
     .pipe(z.email("Enter a valid email address")),
@@ -52,3 +53,9 @@ export const createCompanySchema = z.object({
 
 export type CreateCompanyInput = z.infer<typeof createCompanySchema>;
 export type CompanyAdminInput = z.infer<typeof companyAdminSchema>;
+
+// Super Admin's "complete edit" of an existing Company Admin's profile
+// (/administration/company-admins) — same fields as creation minus password
+// (password reset stays its own separate action/flow).
+export const companyAdminProfileSchema = companyAdminSchema.omit({ password: true });
+export type CompanyAdminProfileInput = z.infer<typeof companyAdminProfileSchema>;

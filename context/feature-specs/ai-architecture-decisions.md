@@ -14,7 +14,7 @@
 
 Version: 1.0
 
-Last Updated: YYYY-MM-DD
+Last Updated: 2026-07-14
 
 ---
 
@@ -134,6 +134,15 @@ Responsibilities
 - Manage all company data
 
 Company Admin can never access another company.
+
+> **Clarification**: these responsibilities describe scope, not the authorization mechanism.
+> Company Admin is not a hardcoded identity check — it is a per-company, protected `Role` row that
+> happens to be granted every catalog permission at company-creation time. Every one of the
+> responsibilities above is actually enforced by `assertPermission(user, module, action)`
+> (`src/lib/permissions.ts`) after `getCurrentCompanyUser()`, never a `role.name === "Company Admin"`
+> comparison (see Permanent Architecture Principle 1 in
+> `architecture-Migration-Super-Admin-Administration-Implementation-Plan.md`). A custom role granted
+> the same permissions would be equally capable.
 
 ---
 

@@ -1,14 +1,9 @@
-import { redirect } from "next/navigation";
-
 import { PlatformShell } from "@/components/layout/platform-shell";
-import { isCurrentUserSuperAdmin } from "@/lib/current-user";
+import { requireSuperAdmin } from "@/lib/current-user";
 import { CreateCompanyForm } from "@/modules/administration/components/create-company-form";
 
 export default async function NewCompanyPage() {
-  const isSuperAdmin = await isCurrentUserSuperAdmin();
-  if (!isSuperAdmin) {
-    redirect("/");
-  }
+  await requireSuperAdmin();
 
   return (
     <PlatformShell>

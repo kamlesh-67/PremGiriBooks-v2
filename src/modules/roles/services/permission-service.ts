@@ -112,10 +112,6 @@ export const permissionService = {
     switch (result.status) {
       case "not_found":
         throw new AppError("Role not found.");
-      case "protected":
-        throw new AppError("This role's permissions cannot be modified.");
-      case "missing_mandatory_permissions":
-        throw new AppError("Cannot remove required permissions from a reserved role.");
       case "last_full_coverage_role":
         throw new AppError("At least one active role with full access must remain.");
       case "ok":
@@ -130,8 +126,28 @@ export const permissionService = {
    * Per-company Role/RolePermission seeding now lives in
    * roleService.seedDefaultRoles(), invoked by TenantBootstrapService at
    * company-creation time, not here.
+   *
+   * Also backfills catalog growth into every company's already-seeded
+   * Company Admin role: seedDefaultRoles grants "every permission in the
+   * catalog at the moment the company is created" — correct then, but
+   * nothing re-grants an existing company's Company Admin role when the
+   * catalog later gains modules/actions, silently defanging every
+   * full-coverage guard (role-coverage.ts) for that company. Additive-only
+   * (permissionRepository.seedRolePermissions skips duplicates), so this is
+   * safe to run on every boot/seed regardless of how many companies exist.
    */
   async ensureCatalog(): Promise<void> {
     await permissionRepository.ensureCatalog(buildCatalogPairs());
+
+    const catalog = await permissionRepository.findCatalog();
+    if (catalog.length === 0) {
+      return;
+    }
+    const catalogIds = catalog.map((permission) => permission.id);
+
+    const companyAdminRoles = await roleRepository.findAllProtectedByName(COMPANY_ADMIN_ROLE_NAME);
+    for (const role of companyAdminRoles) {
+      await permissionRepository.seedRolePermissions(role.id, catalogIds);
+    }
   },
 };

@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 /**
  * "Full coverage" means a role is currently granted every permission in the
@@ -18,16 +18,14 @@ import type { Prisma } from "@prisma/client";
  * the same structural check.
  */
 export async function isFullCoverageRole(
-  tx: Prisma.TransactionClient,
+  tx: Prisma.TransactionClient | PrismaClient,
   roleId: string
 ): Promise<boolean> {
-  const [totalPermissions, roleWithCount] = await Promise.all([
-    tx.permission.count(),
-    tx.role.findUnique({
-      where: { id: roleId },
-      include: { _count: { select: { permissions: true } } },
-    }),
-  ]);
+  const totalPermissions = await tx.permission.count();
+  const roleWithCount = await tx.role.findUnique({
+    where: { id: roleId },
+    include: { _count: { select: { permissions: true } } },
+  });
 
   if (!roleWithCount || totalPermissions === 0) {
     return false;

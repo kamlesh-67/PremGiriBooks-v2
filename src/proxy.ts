@@ -12,10 +12,15 @@ const PUBLIC_ROUTES = new Set(["/login"]);
 const PLATFORM_ALLOWED_PREFIXES = ["/administration", "/profile"];
 const ADMINISTRATION_PREFIX = "/administration";
 
+// Exact-match or prefix-plus-slash only — a bare pathname.startsWith(prefix)
+// would also match an unrelated route that merely starts with the same
+// characters (e.g. "/administration-foo" against "/administration").
+function matchesRoutePrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
+
 function isPlatformAllowedRoute(pathname: string): boolean {
-  return PLATFORM_ALLOWED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
+  return PLATFORM_ALLOWED_PREFIXES.some((prefix) => matchesRoutePrefix(pathname, prefix));
 }
 
 function clearStaleAuthCookies(response: NextResponse): NextResponse {
@@ -64,7 +69,7 @@ export default async function proxy(request: NextRequest) {
   if (session.user.userType === "PLATFORM" && !isPlatformAllowedRoute(pathname)) {
     return NextResponse.redirect(new URL(ADMINISTRATION_PREFIX, request.url));
   }
-  if (session.user.userType === "COMPANY" && pathname.startsWith(ADMINISTRATION_PREFIX)) {
+  if (session.user.userType === "COMPANY" && matchesRoutePrefix(pathname, ADMINISTRATION_PREFIX)) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

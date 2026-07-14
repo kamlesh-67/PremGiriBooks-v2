@@ -7,15 +7,31 @@ import { toActionErrorMessage } from "@/lib/action-error";
 import { getCurrentCompanyUser } from "@/lib/current-user";
 import { assertPermission } from "@/lib/permissions";
 import { setCurrentCompany } from "@/lib/current-company";
+import { companyService } from "@/modules/company/services/company-service";
 import { companySettingsService } from "@/modules/company/services/company-settings-service";
 import { saveCompanyLogo } from "@/modules/company/services/company-logo-service";
-import type { CompanySettingsInput } from "@/modules/company/validation/company-schema";
+import type { CompanyProfileInput, CompanySettingsInput } from "@/modules/company/validation/company-schema";
 import type { ActionResult } from "@/types/api";
-import type { CompanySettings } from "@/types/company";
+import type { CompanySettings, CompanyWithSettings } from "@/types/company";
 
-// Create/edit-legal-info/activate/deactivate moved to
-// modules/administration/actions/company-admin-actions.ts — those are
-// Super-Admin-only Platform operations now, per the Company Module split.
+// Legal/registration-info edit (Super-Admin-only) and activate/deactivate
+// moved to modules/administration/actions/company-admin-actions.ts — those
+// are Platform operations now, per the Company Module split.
+// updateCompanyProfileAction below is the Company Admin-scoped counterpart:
+// same company row, everything except the compliance-sensitive fields.
+
+export async function updateCompanyProfileAction(
+  companyId: string,
+  input: CompanyProfileInput
+): Promise<ActionResult<CompanyWithSettings>> {
+  try {
+    const company = await companyService.updateCompanyProfile(companyId, input);
+    revalidatePath(`/company/${companyId}/edit`);
+    return { success: true, data: company };
+  } catch (error) {
+    return { success: false, error: toActionErrorMessage(error) };
+  }
+}
 
 export async function updateCompanySettingsAction(
   companyId: string,
@@ -23,7 +39,7 @@ export async function updateCompanySettingsAction(
 ): Promise<ActionResult<CompanySettings>> {
   try {
     const settings = await companySettingsService.updateSettings(companyId, input);
-    revalidatePath(`/company/${companyId}/edit`);
+    revalidatePath("/profile");
     return { success: true, data: settings };
   } catch (error) {
     return { success: false, error: toActionErrorMessage(error) };

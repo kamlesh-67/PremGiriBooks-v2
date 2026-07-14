@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import { PlatformShell } from "@/components/layout/platform-shell";
 import { Button } from "@/components/ui/button";
-import { isCurrentUserSuperAdmin } from "@/lib/current-user";
+import { requireSuperAdmin } from "@/lib/current-user";
 import { companyService } from "@/modules/company/services/company-service";
 import { CompanySearchForm } from "@/modules/company/components/company-search-form";
 import { CompanyTable } from "@/modules/company/components/company-table";
@@ -21,10 +20,7 @@ interface AdministrationCompaniesPageProps {
 export default async function AdministrationCompaniesPage({
   searchParams,
 }: AdministrationCompaniesPageProps) {
-  const isSuperAdmin = await isCurrentUserSuperAdmin();
-  if (!isSuperAdmin) {
-    redirect("/");
-  }
+  await requireSuperAdmin();
 
   const params = await searchParams;
   const search = params.search ?? "";

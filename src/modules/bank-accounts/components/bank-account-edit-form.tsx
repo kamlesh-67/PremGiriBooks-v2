@@ -60,8 +60,12 @@ export function BankAccountEditForm({ bankAccount }: BankAccountEditFormProps) {
 
   async function handleSubmit(data: UpdateBankAccountInput) {
     setIsSubmitting(true);
-    const result = await updateBankAccountAction(bankAccount.id, data);
-    setIsSubmitting(false);
+    let result: Awaited<ReturnType<typeof updateBankAccountAction>>;
+    try {
+      result = await updateBankAccountAction(bankAccount.id, data);
+    } finally {
+      setIsSubmitting(false);
+    }
 
     if (result.success) {
       toast.success("Bank account saved successfully.");
@@ -226,7 +230,10 @@ export function BankAccountEditForm({ bankAccount }: BankAccountEditFormProps) {
                     min={0}
                     step="0.01"
                     {...field}
-                    onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                    onChange={(event) => {
+                      const value = event.target.valueAsNumber;
+                      field.onChange(Number.isNaN(value) ? undefined : value);
+                    }}
                   />
                 </FormControl>
                 <FormMessage />

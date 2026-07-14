@@ -341,6 +341,16 @@ password or deactivate their account, not just a Company Admin's.
 call chains end-to-end to confirm every mutation + its audit write now share one `tx`, and that a
 non-Company-Admin `userId` is rejected by `assertIsCompanyAdmin` before any write is attempted.
 
+> **Pointer (added later):** the transaction-sharing fix above is still accurate for what it
+> covers, but it does not close a separate TOCTOU window — the Company Admin role check happens
+> once, before the transaction opens, so a concurrent role change in that gap goes undetected. The
+> actual code-level fix (re-validating the target's role *inside* the transaction, under
+> Serializable isolation) is tracked and re-applied in
+> `context/current-error/11-review-batch-fixes-round2.md`, touching
+> `src/modules/administration/services/platform-user-service.ts` and
+> `src/modules/users/repositories/user-repository.ts`. This file is left as-is otherwise, an
+> accurate historical record of what shipped at the time.
+
 ---
 
 ## Validation (all 4 fixes)

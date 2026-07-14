@@ -20,6 +20,19 @@ export type DeactivateUserResult =
   | { status: "self" }
   | { status: "last_active_admin" };
 
+export type SetActiveByIdResult =
+  | { status: "ok"; user: UserWithRole }
+  | { status: "not_found" }
+  | { status: "last_active_admin" };
+
+export type ReassignCompanyResult =
+  | { status: "ok"; user: UserWithRole; previousCompanyId: string }
+  | { status: "not_found" }
+  | { status: "same_company" }
+  | { status: "target_company_not_found" }
+  | { status: "target_role_not_found" }
+  | { status: "last_active_admin" };
+
 export type UpdateUserResult =
   | { status: "ok"; user: UserWithRole }
   | { status: "not_found" }
@@ -41,6 +54,7 @@ export interface CompanyAdminSummary {
   username: string;
   fullName: string;
   email: string;
+  mobile: string | null;
   isActive: boolean;
   companyId: string;
   companyName: string;

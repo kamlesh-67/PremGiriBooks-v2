@@ -1,17 +1,18 @@
-import { redirect } from "next/navigation";
-
 import { PlatformShell } from "@/components/layout/platform-shell";
-import { isCurrentUserSuperAdmin } from "@/lib/current-user";
+import { requireSuperAdmin } from "@/lib/current-user";
+import { companyService } from "@/modules/company/services/company-service";
 import { platformUserService } from "@/modules/administration/services/platform-user-service";
 import { CompanyAdminTable } from "@/modules/administration/components/company-admin-table";
 
 export default async function CompanyAdminsPage() {
-  const isSuperAdmin = await isCurrentUserSuperAdmin();
-  if (!isSuperAdmin) {
-    redirect("/");
-  }
+  await requireSuperAdmin();
 
-  const companyAdmins = await platformUserService.listCompanyAdmins();
+  const [companyAdmins, companies] = await Promise.all([
+    platformUserService.listCompanyAdmins(),
+    // Only active companies are valid reassignment targets — an inactive
+    // company isn't somewhere a Company Admin can usefully be moved to.
+    companyService.listCompanies({ status: "active" }),
+  ]);
 
   return (
     <PlatformShell>
@@ -23,7 +24,7 @@ export default async function CompanyAdminsPage() {
           </p>
         </div>
 
-        <CompanyAdminTable companyAdmins={companyAdmins} />
+        <CompanyAdminTable companyAdmins={companyAdmins} companies={companies} />
       </div>
     </PlatformShell>
   );

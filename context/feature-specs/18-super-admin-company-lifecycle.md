@@ -348,10 +348,16 @@ different (Companies, Company Admins, Licenses, Settings, Audit, Backup — the 
 - No mutation may bypass its permission/identity check. No mutation may accept a caller-supplied
   `companyId`/`userId` without independently re-verifying it resolves to something the actor is
   actually allowed to touch.
-- Every Create/Update/Activate/Deactivate action writes an `AuditLog` entry in the **same**
-  transaction as the mutation it records — never as a separate, unwrapped statement. A failure
-  between the state change and the audit write must roll back both together, not leave the state
-  change committed with no audit trail.
+- Create/Activate/Deactivate actions write an `AuditLog` entry in the **same** transaction as the
+  mutation they record — never as a separate, unwrapped statement. A failure between the state
+  change and the audit write must roll back both together, not leave the state change committed
+  with no audit trail.
+- **Known gap**: `companyService.updateCompany` (a plain Company detail edit) currently does
+  **not** write an `AuditLog` entry at all — no transaction, no audit row — unlike its three
+  siblings (`createCompany`, `activateCompany`, `deactivateCompany`), which all correctly write
+  one. This is a real deviation from this section's original blanket claim, not yet closed in
+  code; see `architecture-context.md`'s Known Implementation Gaps item 3 for the current, narrow
+  scope of `AuditLog` coverage.
 
 ---
 

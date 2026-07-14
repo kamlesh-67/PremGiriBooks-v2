@@ -40,3 +40,8 @@ export function normalizeCompanyInput(input: CompanyInput): CompanyPersistData {
 
   return normalized as CompanyPersistData;
 }
+
+/** Same blank-to-null rule as normalizeCompanyInput, for a single field. */
+export function blankToNull(value: string | undefined): string | null {
+  return value === "" || value === undefined ? null : value;
+}

@@ -16,9 +16,11 @@ export const DEFAULT_ROLE_NAMES = [
   "Employee",
 ] as const;
 
-// The one hardcoded role name this codebase still relies on — used only to
-// seed the per-company Company Admin role and to identify it when granting
-// full catalog coverage (TenantBootstrapService). Never used for
-// authorization (that's userType === "PLATFORM" for Super Admin, and
-// assertPermission() for every Company-side check).
+// The one hardcoded role name this codebase still relies on — used to seed
+// the per-company Company Admin role, to identify it when granting full
+// catalog coverage (TenantBootstrapService, permission-service.ts's
+// ensureCatalog backfill), and by user-repository.ts's findAllCompanyAdmins
+// to find every company's Company Admin for the Administration list. Never
+// used for authorization (that's userType === "PLATFORM" for Super Admin,
+// and assertPermission() for every Company-side check).
 export const COMPANY_ADMIN_ROLE_NAME = "Company Admin";

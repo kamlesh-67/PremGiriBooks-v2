@@ -20,55 +20,55 @@ import {
 } from "@/components/ui/form";
 import { BUSINESS_TYPE_SUGGESTIONS } from "@/constants/company";
 import { LogoUpload } from "@/modules/company/components/logo-upload";
-import { companySchema, type CompanyInput } from "@/modules/company/validation/company-schema";
-import type { ActionResult } from "@/types/api";
-import type { CompanyWithSettings } from "@/types/company";
+import { updateCompanyProfileAction } from "@/modules/company/actions/company-actions";
+import {
+  companyProfileSchema,
+  type CompanyProfileInput,
+} from "@/modules/company/validation/company-schema";
 
-interface CompanyFormProps {
-  defaultValues?: Partial<CompanyInput>;
-  onSubmit: (data: CompanyInput) => Promise<ActionResult<CompanyWithSettings>>;
-  submitLabel: string;
-  redirectPath?: string;
+interface CompanyProfileFormProps {
+  companyId: string;
+  defaultValues: Partial<CompanyProfileInput>;
 }
 
-const BASE_DEFAULT_VALUES: CompanyInput = {
+const BASE_DEFAULT_VALUES: CompanyProfileInput = {
   companyName: "",
-  legalName: "",
   country: "India",
-  currency: "INR",
   currencySymbol: "₹",
   decimalPlaces: 2,
 };
 
-export function CompanyForm({
-  defaultValues,
-  onSubmit,
-  submitLabel,
-  redirectPath = "/company",
-}: CompanyFormProps) {
+// Company Admin's own edit of their company's profile — everything except
+// the compliance-sensitive registration identifiers (Legal Name, GSTIN, PAN,
+// TAN, CIN) and currency code, which stay on the Super-Admin-only form at
+// /administration/companies/[id]/edit (CompanyForm/CompanyEditForm).
+export function CompanyProfileForm({ companyId, defaultValues }: CompanyProfileFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  const form = useForm<CompanyInput>({
-    resolver: zodResolver(companySchema),
+  const form = useForm<CompanyProfileInput>({
+    resolver: zodResolver(companyProfileSchema),
     defaultValues: { ...BASE_DEFAULT_VALUES, ...defaultValues },
   });
 
   const logoValue = useWatch({ control: form.control, name: "logo" });
 
-  async function handleSubmit(data: CompanyInput) {
+  async function handleSubmit(data: CompanyProfileInput) {
     setIsSubmitting(true);
-    const result = await onSubmit(data);
-    setIsSubmitting(false);
+    let result: Awaited<ReturnType<typeof updateCompanyProfileAction>>;
+    try {
+      result = await updateCompanyProfileAction(companyId, data);
+    } finally {
+      setIsSubmitting(false);
+    }
 
     if (result.success) {
-      toast.success("Company saved successfully.");
-      router.push(redirectPath);
+      toast.success("Company profile saved successfully.");
       router.refresh();
       return;
     }
 
-    toast.error(result.error ?? "Failed to save company.");
+    toast.error(result.error ?? "Failed to save company profile.");
   }
 
   return (
@@ -81,19 +81,6 @@ export function CompanyForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Company Name *</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="legalName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Legal Name *</FormLabel>
                 <FormControl>
                   <Input {...field} />
                 </FormControl>
@@ -132,61 +119,6 @@ export function CompanyForm({
               <option key={suggestion} value={suggestion} />
             ))}
           </datalist>
-        </FormSection>
-
-        <FormSection title="Registration">
-          <FormField
-            control={form.control}
-            name="gstin"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>GSTIN</FormLabel>
-                <FormControl>
-                  <Input {...field} value={field.value ?? ""} className="uppercase" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="pan"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>PAN</FormLabel>
-                <FormControl>
-                  <Input {...field} value={field.value ?? ""} className="uppercase" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="tan"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>TAN</FormLabel>
-                <FormControl>
-                  <Input {...field} value={field.value ?? ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="cin"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>CIN</FormLabel>
-                <FormControl>
-                  <Input {...field} value={field.value ?? ""} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
         </FormSection>
 
         <FormSection title="Contact">
@@ -338,20 +270,10 @@ export function CompanyForm({
           />
         </FormSection>
 
-        <FormSection title="Financial">
-          <FormField
-            control={form.control}
-            name="currency"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Currency *</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <FormSection
+          title="Financial Display"
+          description="Currency code itself is managed by Super Admin."
+        >
           <FormField
             control={form.control}
             name="currencySymbol"
@@ -390,24 +312,14 @@ export function CompanyForm({
           <Label>Company Logo</Label>
           <LogoUpload
             value={logoValue ?? null}
-            onChange={(path) =>
-              form.setValue("logo", path ?? undefined, { shouldDirty: true })
-            }
+            onChange={(path) => form.setValue("logo", path ?? undefined, { shouldDirty: true })}
             disabled={isSubmitting}
           />
         </div>
 
         <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.push(redirectPath)}
-            disabled={isSubmitting}
-          >
-            Cancel
-          </Button>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Saving…" : submitLabel}
+            {isSubmitting ? "Saving…" : "Save Changes"}
           </Button>
         </div>
       </form>

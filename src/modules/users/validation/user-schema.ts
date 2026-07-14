@@ -45,6 +45,7 @@ export const updateUserSchema = z.object({
   email: z
     .string()
     .trim()
+    .toLowerCase()
     .min(1, "Email is required")
     .max(150, "Email is too long")
     .pipe(z.email("Enter a valid email address")),

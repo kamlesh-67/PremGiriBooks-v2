@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { FormSection } from "@/components/common/form-section";
 import { Input } from "@/components/ui/input";
 import {
   Form,
@@ -21,24 +22,6 @@ import {
   type CreateCompanyInput,
 } from "@/modules/administration/validation/create-company-schema";
 import { createCompanyAction } from "@/modules/administration/actions/company-admin-actions";
-
-interface FormSectionProps {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}
-
-function FormSection({ title, description, children }: FormSectionProps) {
-  return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h3 className="text-sm font-medium text-foreground">{title}</h3>
-        {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{children}</div>
-    </div>
-  );
-}
 
 const DEFAULT_VALUES: CreateCompanyInput = {
   company: {

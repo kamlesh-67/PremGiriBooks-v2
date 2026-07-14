@@ -51,6 +51,31 @@ function buildWhere(companyId: string, filters: BankAccountListFilters): Prisma.
   return where;
 }
 
+// Shared body for activate()/deactivate() below — both flip isActive on the
+// BankAccount's paired Ledger and on the BankAccount row itself against the
+// caller-supplied client, so the caller (bankAccountService) can fold this
+// into its own transaction alongside the AuditLog write.
+async function setBankAccountActive(
+  id: string,
+  companyId: string,
+  isActive: boolean,
+  client: PrismaClientOrTransaction
+): Promise<ActivateBankAccountResult | DeactivateBankAccountResult> {
+  const existing = await client.bankAccount.findUnique({ where: { id } });
+  if (!existing || existing.companyId !== companyId) {
+    return { status: "not_found" };
+  }
+
+  await client.ledger.update({ where: { id: existing.ledgerId }, data: { isActive } });
+  const updated = await client.bankAccount.update({
+    where: { id },
+    data: { isActive },
+    include: LEDGER_WITH_GROUP_INCLUDE,
+  });
+
+  return { status: "ok", bankAccount: toBankAccountWithLedger(updated) };
+}
+
 export const bankAccountRepository = {
   async findMany(
     companyId: string,
@@ -113,47 +138,17 @@ export const bankAccountRepository = {
    * Deactivating (and, symmetrically, activating) a Bank Account always
    * flips its own isActive together with its paired Ledger's — a Bank
    * Ledger with no active BankAccount detail (or vice versa) is an
-   * inconsistent state 15-bank-management.md forbids. Writes both rows
-   * directly through the interactive transaction rather than delegating to
-   * ledgerRepository.activate()/deactivate() — those each open their own
-   * separate transaction, which would break the "both together,
-   * atomically" guarantee, and the one business rule they'd otherwise
-   * re-check (blocking the change for a system-defined ledger) never
-   * applies here, since a Bank Account's Ledger is never system-defined.
+   * inconsistent state 15-bank-management.md forbids. Accepts an external
+   * client (default `= prisma`), matching create()/update() above, so the
+   * caller (bankAccountService) can fold this into its own transaction
+   * alongside the AuditLog write, rather than this repository opening its
+   * own separate transaction.
    */
-  async activate(id: string, companyId: string): Promise<ActivateBankAccountResult> {
-    return prisma.$transaction(async (tx) => {
-      const existing = await tx.bankAccount.findUnique({ where: { id } });
-      if (!existing || existing.companyId !== companyId) {
-        return { status: "not_found" };
-      }
-
-      await tx.ledger.update({ where: { id: existing.ledgerId }, data: { isActive: true } });
-      await tx.bankAccount.update({ where: { id }, data: { isActive: true } });
-
-      const withLedger = await tx.bankAccount.findUniqueOrThrow({
-        where: { id },
-        include: LEDGER_WITH_GROUP_INCLUDE,
-      });
-      return { status: "ok", bankAccount: toBankAccountWithLedger(withLedger) };
-    });
+  async activate(id: string, companyId: string, client: PrismaClientOrTransaction = prisma): Promise<ActivateBankAccountResult> {
+    return setBankAccountActive(id, companyId, true, client);
   },
 
-  async deactivate(id: string, companyId: string): Promise<DeactivateBankAccountResult> {
-    return prisma.$transaction(async (tx) => {
-      const existing = await tx.bankAccount.findUnique({ where: { id } });
-      if (!existing || existing.companyId !== companyId) {
-        return { status: "not_found" };
-      }
-
-      await tx.ledger.update({ where: { id: existing.ledgerId }, data: { isActive: false } });
-      await tx.bankAccount.update({ where: { id }, data: { isActive: false } });
-
-      const withLedger = await tx.bankAccount.findUniqueOrThrow({
-        where: { id },
-        include: LEDGER_WITH_GROUP_INCLUDE,
-      });
-      return { status: "ok", bankAccount: toBankAccountWithLedger(withLedger) };
-    });
+  async deactivate(id: string, companyId: string, client: PrismaClientOrTransaction = prisma): Promise<DeactivateBankAccountResult> {
+    return setBankAccountActive(id, companyId, false, client);
   },
 };

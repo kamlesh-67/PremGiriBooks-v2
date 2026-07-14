@@ -1,5 +1,6 @@
 import type { Prisma, Role } from "@prisma/client";
 
+import { toActionErrorMessage } from "@/lib/action-error";
 import { AppError } from "@/lib/app-error";
 import { getCurrentCompanyUser } from "@/lib/current-user";
 import { assertPermission } from "@/lib/permissions";
@@ -15,7 +16,12 @@ function translateRolePersistError(error: unknown): never {
     throw new AppError("A role with this name already exists.");
   }
 
-  throw new AppError("Failed to save the role. Please try again.");
+  // Routes through the shared Server Action translator so an unexpected
+  // persistence failure is logged server-side (via the Pino logger) instead
+  // of vanishing with zero trace — matches every sibling
+  // translate*PersistError in this codebase (bank-account-service.ts,
+  // ledger-group-service.ts, ledger-service.ts, company-service.ts).
+  throw new AppError(toActionErrorMessage(error));
 }
 
 export const roleService = {

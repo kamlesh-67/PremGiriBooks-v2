@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { AppError } from "@/lib/app-error";
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
@@ -156,6 +157,19 @@ export async function isCurrentUserSuperAdmin(): Promise<boolean> {
 export async function assertSuperAdmin(): Promise<void> {
   if (!(await isCurrentUserSuperAdmin())) {
     throw new AuthorizationError("Only Super Admin can perform this action.");
+  }
+}
+
+/**
+ * Page-level guard shared by every Super-Admin-only /administration page —
+ * redirects a non-Super-Admin to "/" instead of each page repeating the same
+ * isCurrentUserSuperAdmin() + redirect("/") pair. Use assertSuperAdmin()
+ * instead for Server Actions/services, where a thrown AuthorizationError
+ * (not a redirect) is the right failure mode.
+ */
+export async function requireSuperAdmin(): Promise<void> {
+  if (!(await isCurrentUserSuperAdmin())) {
+    redirect("/");
   }
 }
 

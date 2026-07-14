@@ -292,9 +292,11 @@ Verify
 - Passwords are hashed with Argon2 and never exposed by any service or action.
 - Users can be updated, including an optional password reset.
 - Users can be activated and deactivated.
-- The last active Administrator for a company cannot be deactivated.
-- An Administrator cannot deactivate their own account.
-- The six default roles are seeded and selectable.
+- The last active user in a company holding a role with full permission-catalog coverage
+  (`src/modules/roles/utils/role-coverage.ts`) cannot be deactivated — a structural,
+  name-independent invariant, not tied to any role literally named "Administrator"/"Company Admin".
+- A user cannot deactivate their own account.
+- The six default roles (Company Admin + 5 others) are seeded per company and selectable.
 - User search works by name/username/email/role.
 - No TypeScript errors.
 - No ESLint errors.

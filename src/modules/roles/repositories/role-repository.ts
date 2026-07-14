@@ -18,6 +18,17 @@ export const roleRepository = {
     });
   },
 
+  // Platform-wide (cross-company) read, unlike every other method here —
+  // used only by permissionService.ensureCatalog() at boot/seed time to
+  // backfill catalog growth into every company's already-seeded protected
+  // role of this name (e.g. Company Admin), never per-request. Gating that
+  // caller (none needed here — a boot-time system task, not a user action)
+  // stays the caller's concern, per this repository's usual
+  // "no authorization here" rule.
+  findAllProtectedByName(name: string): Promise<Role[]> {
+    return prisma.role.findMany({ where: { isProtected: true, name } });
+  },
+
   // A role belonging to a different company must resolve identically to
   // "not found" — mirrors every other tenant-scoped repository in this
   // codebase (user-repository.ts, ledger-group-repository.ts, ...).
@@ -48,10 +59,17 @@ export const roleRepository = {
     });
   },
 
+  // A protected role can never be renamed — role-service.ts already checks
+  // this before calling in, but repeating it here mirrors deactivate()'s
+  // own defense-in-depth "protected" check just below, rather than relying
+  // solely on the one service-layer call site to never regress.
   async update(id: string, companyId: string, name: string): Promise<Role | null> {
     try {
       const existing = await prisma.role.findUnique({ where: { id } });
       if (!existing || existing.companyId !== companyId) {
+        return null;
+      }
+      if (existing.isProtected && name !== existing.name) {
         return null;
       }
       return await prisma.role.update({ where: { id }, data: { name } });

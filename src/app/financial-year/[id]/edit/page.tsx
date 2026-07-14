@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { hasPermission, isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { financialYearService } from "@/modules/financial-year/services/financial-year-service";
 import { FinancialYearEditForm } from "@/modules/financial-year/components/financial-year-edit-form";
 import { toFinancialYearFormValues } from "@/modules/financial-year/utils/financial-year-form-values";
@@ -18,10 +19,17 @@ export default async function EditFinancialYearPage({ params }: EditFinancialYea
     notFound();
   }
 
-  const isAdmin = await isCurrentUserCompanyAdmin();
-  if (!isAdmin) {
+  // The actual mutation (financialYearService.updateFinancialYear) is gated
+  // by assertPermission(user, "financial-year", "edit") — page access must
+  // match that same boundary, not the coarser Company-Admin nav-visibility
+  // check, so a user holding this permission via a custom role isn't
+  // redirected away from a page the service would let them submit to.
+  const user = await getCurrentCompanyUser();
+  const canEdit = await hasPermission(user, "financial-year", "edit");
+  if (!canEdit) {
     redirect("/financial-year");
   }
+  const isAdmin = await isCurrentUserCompanyAdmin();
 
   if (financialYear.isClosed) {
     redirect("/financial-year");

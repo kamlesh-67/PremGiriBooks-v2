@@ -1,13 +1,9 @@
-import { redirect } from "next/navigation";
-
 import { PlatformShell } from "@/components/layout/platform-shell";
 import { ComingSoon } from "@/components/layout/coming-soon";
-import { isCurrentUserSuperAdmin } from "@/lib/current-user";
+import { requireSuperAdmin } from "@/lib/current-user";
 
 export default async function BackupPage() {
-  if (!(await isCurrentUserSuperAdmin())) {
-    redirect("/");
-  }
+  await requireSuperAdmin();
 
   return (
     <PlatformShell>

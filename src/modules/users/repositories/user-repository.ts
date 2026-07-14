@@ -11,6 +11,8 @@ import type {
   CompanyAdminSummary,
   CreateUserResult,
   DeactivateUserResult,
+  ReassignCompanyResult,
+  SetActiveByIdResult,
   UpdateUserResult,
   UserListFilters,
   UserWithRole,
@@ -100,14 +102,28 @@ export const userRepository = {
       omit: SAFE_OMIT,
       orderBy: { fullName: "asc" },
     });
-    return users.map(assertHasRole);
+    // A single malformed row (missing role/companyId — a data-integrity bug,
+    // not a normal outcome) must not take down the whole list page. Isolate
+    // and drop it here instead of letting assertHasRole's throw propagate
+    // across every other, valid row in the result.
+    return users.flatMap((user) => {
+      try {
+        return [assertHasRole(user)];
+      } catch {
+        logger.error({ userId: user.id }, "Skipping malformed user row missing role or companyId");
+        return [];
+      }
+    });
   },
 
   // Callers must always treat "found but belongs to a different company" the
   // same as "not found" — findById on its own does not enforce tenant
   // isolation, since the caller's own companyId isn't known at this layer.
-  async findById(id: string): Promise<UserWithRole | null> {
-    const user = await prisma.user.findUnique({
+  async findById(
+    id: string,
+    client: Prisma.TransactionClient | typeof prisma = prisma
+  ): Promise<UserWithRole | null> {
+    const user = await client.user.findUnique({
       where: { id },
       include: SAFE_INCLUDE,
       omit: SAFE_OMIT,
@@ -279,7 +295,101 @@ export const userRepository = {
     });
   },
 
-  // The two Platform-only (cross-company) exceptions to this repository's
+  // Platform-only (cross-company) profile update for the Administration
+  // module's Company Admins screen — "complete edit" of username/fullName/
+  // email/mobile, distinct from setActiveById (status) and
+  // updatePasswordHash (password). Gated one layer up in
+  // platform-user-service.ts, never here, same as its siblings below.
+  async updateProfileFieldsById(
+    id: string,
+    fields: { username: string; fullName: string; email: string; mobile: string | null },
+    client: Prisma.TransactionClient | typeof prisma = prisma
+  ): Promise<UserWithRole | null> {
+    try {
+      const updated = await client.user.update({
+        where: { id },
+        data: fields,
+        include: SAFE_INCLUDE,
+        omit: SAFE_OMIT,
+      });
+      return assertHasRole(updated);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+        return null;
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Platform-only (cross-company) reassignment of a Company Admin to a
+   * different company — moves both companyId and roleId together, since
+   * Role is per-company (their old roleId doesn't exist in the target
+   * company). Assigns them the target company's own Company Admin role
+   * (looked up by name, not carried over by id) rather than leaving them
+   * roleless. Enforces the same "at least one active full-coverage user
+   * must remain per company" invariant setActiveById/deactivate() do,
+   * against the *source* company — reassigning away has the identical
+   * end-state (one fewer active full-coverage user there) as deactivating.
+   * Callers must pass the transaction client they're already inside
+   * (platformUserService wraps this in a Serializable transaction), same
+   * requirement as setActiveById.
+   */
+  async reassignCompanyById(
+    id: string,
+    targetCompanyId: string,
+    client: Prisma.TransactionClient | typeof prisma = prisma
+  ): Promise<ReassignCompanyResult> {
+    const existingRaw = await client.user.findUnique({
+      where: { id },
+      include: SAFE_INCLUDE,
+      omit: SAFE_OMIT,
+    });
+    if (!existingRaw) {
+      return { status: "not_found" };
+    }
+    const existing = assertHasRole(existingRaw);
+
+    if (existing.companyId === targetCompanyId) {
+      return { status: "same_company" };
+    }
+
+    const targetCompany = await client.company.findUnique({ where: { id: targetCompanyId } });
+    if (!targetCompany) {
+      return { status: "target_company_not_found" };
+    }
+
+    const targetRole = await client.role.findUnique({
+      where: { companyId_name: { companyId: targetCompanyId, name: COMPANY_ADMIN_ROLE_NAME } },
+    });
+    if (!targetRole) {
+      return { status: "target_role_not_found" };
+    }
+
+    if (existing.isActive) {
+      const isFullCoverage = await isFullCoverageRole(client, existing.role.id);
+      if (isFullCoverage) {
+        const stillHasOtherFullCoverageUser = await hasOtherActiveFullCoverageUser(
+          client,
+          existing.companyId,
+          id
+        );
+        if (!stillHasOtherFullCoverageUser) {
+          return { status: "last_active_admin" };
+        }
+      }
+    }
+
+    const updated = await client.user.update({
+      where: { id },
+      data: { companyId: targetCompanyId, roleId: targetRole.id },
+      include: SAFE_INCLUDE,
+      omit: SAFE_OMIT,
+    });
+    return { status: "ok", user: assertHasRole(updated), previousCompanyId: existing.companyId };
+  },
+
+  // The Platform-only (cross-company) exceptions to this repository's
   // "every method takes companyId" rule — reads/writes any Company Admin
   // regardless of which company they belong to, for the Administration
   // module's Company Admins screen. Gated by assertSuperAdmin() one layer
@@ -293,6 +403,7 @@ export const userRepository = {
         username: true,
         fullName: true,
         email: true,
+        mobile: true,
         isActive: true,
         companyId: true,
         company: { select: { companyName: true } },
@@ -309,17 +420,54 @@ export const userRepository = {
         username: user.username,
         fullName: user.fullName,
         email: user.email,
+        mobile: user.mobile,
         isActive: user.isActive,
         companyId: user.companyId,
         companyName: user.company.companyName,
       }));
   },
 
+  /**
+   * Platform-only (cross-company) activate/deactivate, backing
+   * platformUserService.setCompanyAdminActive. Deactivating enforces the
+   * same "at least one active user with full permission-catalog coverage
+   * must remain per company" invariant deactivate()/updateProfile() already
+   * enforce — without it, a Super Admin could deactivate every Company
+   * Admin in a company via /administration/company-admins, leaving it
+   * completely unadministrable with no in-app recovery path. Callers must
+   * pass the transaction client they're already inside (platformUserService
+   * wraps this in a Serializable transaction) so the count-then-write check
+   * below is race-free — this is not itself a Serializable transaction.
+   */
   async setActiveById(
     id: string,
     isActive: boolean,
     client: Prisma.TransactionClient | typeof prisma = prisma
-  ): Promise<UserWithRole | null> {
+  ): Promise<SetActiveByIdResult> {
+    const existingRaw = await client.user.findUnique({
+      where: { id },
+      include: SAFE_INCLUDE,
+      omit: SAFE_OMIT,
+    });
+    if (!existingRaw) {
+      return { status: "not_found" };
+    }
+    const existing = assertHasRole(existingRaw);
+
+    if (!isActive && existing.isActive) {
+      const isFullCoverage = await isFullCoverageRole(client, existing.role.id);
+      if (isFullCoverage) {
+        const stillHasOtherFullCoverageUser = await hasOtherActiveFullCoverageUser(
+          client,
+          existing.companyId,
+          id
+        );
+        if (!stillHasOtherFullCoverageUser) {
+          return { status: "last_active_admin" };
+        }
+      }
+    }
+
     try {
       const updated = await client.user.update({
         where: { id },
@@ -327,10 +475,10 @@ export const userRepository = {
         include: SAFE_INCLUDE,
         omit: SAFE_OMIT,
       });
-      return assertHasRole(updated);
+      return { status: "ok", user: assertHasRole(updated) };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
-        return null;
+        return { status: "not_found" };
       }
       throw error;
     }
@@ -405,7 +553,7 @@ export const userRepository = {
  * the check itself never compares a role's name.
  */
 async function hasOtherActiveFullCoverageUser(
-  tx: Prisma.TransactionClient,
+  tx: Prisma.TransactionClient | typeof prisma,
   companyId: string,
   excludeUserId: string
 ): Promise<boolean> {

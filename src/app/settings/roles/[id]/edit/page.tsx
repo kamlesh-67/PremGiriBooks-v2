@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { hasPermission, isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { PermissionMatrix } from "@/modules/roles/components/permission-matrix";
 import { RoleEditForm } from "@/modules/roles/components/role-edit-form";
 import { permissionService } from "@/modules/roles/services/permission-service";
@@ -12,10 +13,15 @@ interface EditRolePageProps {
 }
 
 export default async function EditRolePage({ params }: EditRolePageProps) {
-  const isAdmin = await isCurrentUserCompanyAdmin();
-  if (!isAdmin) {
+  // Page access matches roleService's real read boundary (roles:view) —
+  // mutations (name/permission changes) stay gated at roles:edit inside
+  // RoleEditForm's/PermissionMatrix's own server actions.
+  const user = await getCurrentCompanyUser();
+  const canView = await hasPermission(user, "roles", "view");
+  if (!canView) {
     redirect("/settings/roles");
   }
+  const isAdmin = await isCurrentUserCompanyAdmin();
 
   const { id } = await params;
   const role = await roleService.getRole(id);

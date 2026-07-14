@@ -60,9 +60,16 @@ export const companyRepository = {
     });
   },
 
-  async update(id: string, data: CompanyPersistData): Promise<CompanyWithSettings | null> {
+  // Accepts an optional transaction client, mirroring setActive() below, so
+  // companyService.updateCompany() can commit this update atomically with
+  // the AuditLog row that records it.
+  async update(
+    id: string,
+    data: CompanyPersistData,
+    client: PrismaClientOrTransaction = prisma
+  ): Promise<CompanyWithSettings | null> {
     try {
-      return await prisma.company.update({
+      return await client.company.update({
         where: { id },
         data,
         include: { settings: true },

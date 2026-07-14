@@ -314,11 +314,13 @@ model BankAccount {
 }
 
 // Scoped narrowly to the Administration-side tenant-lifecycle events the
-// Super Admin migration itself introduces (Company Created, Company
-// Admin Created, Company Activated/Deactivated, Company Admin Password
-// Reset) — not a general audit-log retrofit across every existing module.
-// That broader "Write Audit Log" gap remains separately tracked in
-// architecture-context.md's Known Implementation Gaps.
+// Super Admin migration itself introduces (Company Created/Updated, Company
+// Admin Created/Updated/Reassigned, Company Activated/Deactivated, Company
+// Admin Password Reset/Activated/Deactivated), plus Bank Account
+// Activated/Deactivated (bank-accounts module) — not a general audit-log
+// retrofit across every existing module. That broader "Write Audit Log" gap
+// remains separately tracked in architecture-context.md's Known
+// Implementation Gaps.
 model AuditLog {
   id          String   @id @default(uuid())
   actorUserId String

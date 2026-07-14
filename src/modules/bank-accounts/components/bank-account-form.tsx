@@ -255,7 +255,10 @@ export function BankAccountForm({ groups, onSubmit }: BankAccountFormProps) {
                     min={0}
                     step="0.01"
                     {...field}
-                    onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                    onChange={(event) => {
+                      const value = event.target.valueAsNumber;
+                      field.onChange(Number.isNaN(value) ? undefined : value);
+                    }}
                   />
                 </FormControl>
                 <FormMessage />
