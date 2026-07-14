@@ -43,6 +43,14 @@ Build the reusable ERP platform before implementing business modules.
 | 10  | Role & Permission Management       | ✅     |
 | 11  | Branch Management                  | ✅     |
 
+> ⚠️ **Status discrepancy (recorded 2026-07-14, needs user confirmation):** #11 Branch
+> Management is marked ✅ above, but no `src/modules/branches` module or `/branch` route
+> exists in the codebase — `context/feature-specs/12-branch-management.md` was drafted
+> 2026-07-12 and never implemented, and `phase-01-closure-notes.md` says "Branch Management
+> begins Phase 02." Only the `Branch` Prisma table (Database Foundation) exists. Warehouse
+> Management (#22 below) depends on Branch. The ✅ has been left as-is pending explicit user
+> direction; see `context/progress-tracker.md`.
+
 Phase Status
 
 ✅ Completed
@@ -57,7 +65,7 @@ Implement all master data and shared business engines required by transactional 
 
 Phase Status
 
-🟨 In Progress — Accounting Foundation group complete (all 5 implemented as of 2026-07-14). Inventory Masters, Business Parties, Pricing, and Shared ERP Engines groups below are not started.
+🟨 In Progress — Accounting Foundation group complete (all 5 implemented as of 2026-07-14). Inventory Masters started: Unit Management (#17, `context/feature-specs/19-unit-management.md`) implemented 2026-07-14; Category through Product (#18–#23) not started. Business Parties, Pricing, and Shared ERP Engines groups below are not started.
 
 ---
 
@@ -77,9 +85,11 @@ Phase Status
 
 ## Inventory Masters
 
+Unit Management (#17, `context/feature-specs/19-unit-management.md` — spec file number 19 because 18 was already taken) implemented 2026-07-14.
+
 | #   | Feature              | Depends On                                          | Status |
 | --- | -------------------- | --------------------------------------------------- | ------ |
-| 17  | Unit Management      | Database Foundation                                 | ⬜     |
+| 17  | Unit Management      | Database Foundation                                 | ✅     |
 | 18  | Category Management  | Database Foundation                                 | ⬜     |
 | 19  | Brand Management     | Database Foundation                                 | ⬜     |
 | 20  | HSN Management       | Database Foundation                                 | ⬜     |
@@ -256,7 +266,7 @@ These are intentionally outside the first production release.
 
 **Next Feature to Implement**
 
-➡ **17 - Unit Management** (Inventory Masters group) — no spec drafted yet (`context/feature-specs/` stops at 17-income-heads.md, plus the separately-scoped 12-branch-management.md and 18-super-admin-company-lifecycle.md). Income Heads (#16, the last Accounting Foundation feature) was implemented 2026-07-14, completing that group. Per the Notes below, the next group in this phase is Inventory Masters — but the specific next feature awaits explicit user direction, since feature-spec 12 (Branch Management) also remains drafted-but-unimplemented from a prior session and per `ai-workflow-rules.md` only one feature is worked at a time.
+➡ **18 - Category Management** (Inventory Masters group) — no spec drafted yet. Unit Management (#17, `context/feature-specs/19-unit-management.md`) was implemented 2026-07-14 on branch `18-Unit-Managemen`. The next Inventory Masters item in dependency order is Category Management (#18) — but the specific next feature still awaits explicit user direction, since feature-spec 12 (Branch Management) also remains drafted-but-unimplemented from a prior session (see the Phase 1 status-discrepancy note above) and per `ai-workflow-rules.md` only one feature is worked at a time.
 
 ---
 

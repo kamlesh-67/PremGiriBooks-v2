@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppError } from "@/lib/app-error";
-import { runLedgerAction } from "@/modules/ledgers/actions/run-ledger-action";
+import { runAction } from "@/lib/run-action";
 
 const { revalidatePathMock, warnMock, errorMock } = vi.hoisted(() => ({
   revalidatePathMock: vi.fn(),
@@ -17,20 +17,20 @@ vi.mock("@/lib/logger", () => ({
   logger: { warn: warnMock, error: errorMock },
 }));
 
-describe("runLedgerAction", () => {
+describe("runAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("returns the operation result and revalidates every path on success", async () => {
-    const result = await runLedgerAction(async () => ({ id: "l1" }), ["/a", "/b"]);
+    const result = await runAction(async () => ({ id: "l1" }), ["/a", "/b"]);
 
     expect(result).toEqual({ success: true, data: { id: "l1" } });
     expect(revalidatePathMock.mock.calls).toEqual([["/a"], ["/b"]]);
   });
 
   it("returns a failure without revalidating when the operation throws", async () => {
-    const result = await runLedgerAction(async () => {
+    const result = await runAction(async () => {
       throw new AppError("Ledger not found.");
     }, ["/a"]);
 
@@ -41,7 +41,7 @@ describe("runLedgerAction", () => {
   it("replaces a generic operation error with the generic message and logs it server-side", async () => {
     const thrown = new Error("connect ECONNREFUSED 127.0.0.1:5432");
 
-    const result = await runLedgerAction(async () => {
+    const result = await runAction(async () => {
       throw thrown;
     }, ["/a"]);
 
@@ -58,7 +58,7 @@ describe("runLedgerAction", () => {
       throw new Error("static generation store missing");
     });
 
-    const result = await runLedgerAction(async () => ({ id: "l1" }), ["/a", "/b"]);
+    const result = await runAction(async () => ({ id: "l1" }), ["/a", "/b"]);
 
     // The mutation persisted — a cache-invalidation failure must not surface
     // as a failed action (it would invite retrying work that succeeded).

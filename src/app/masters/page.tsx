@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, CalendarRange } from "lucide-react";
+import { Building2, CalendarRange, Ruler } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,12 @@ const MASTERS_MODULES = [
     icon: CalendarRange,
     title: "Financial Year Management",
     description: "Manage financial years, current year, and closing.",
+  },
+  {
+    href: "/masters/units",
+    icon: Ruler,
+    title: "Units",
+    description: "Manage the units of measure used by products and documents.",
   },
 ] as const;
 
