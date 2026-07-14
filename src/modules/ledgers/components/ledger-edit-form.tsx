@@ -28,10 +28,17 @@ import {
 import { AccountNatureBadge } from "@/modules/ledger-groups/components/account-nature-badge";
 import { updateLedgerAction } from "@/modules/ledgers/actions/ledger-actions";
 import { updateLedgerSchema, type UpdateLedgerInput } from "@/modules/ledgers/validation/ledger-schema";
-import type { LedgerWithGroup } from "@/types/ledger";
+import type { ActionResult } from "@/types/api";
+import type { Ledger, LedgerWithGroup } from "@/types/ledger";
 
 interface LedgerEditFormProps {
   ledger: LedgerWithGroup;
+  /** Server Action to save with; defaults to the generic Ledger update. */
+  action?: (id: string, input: UpdateLedgerInput) => Promise<ActionResult<Ledger>>;
+  /** List route to return to on Cancel / after a successful save. */
+  listPath?: string;
+  /** Noun used in toasts, e.g. "Expense Head". */
+  entityLabel?: string;
 }
 
 // The system-defined "Cash" ledger can never be renamed or deactivated
@@ -39,7 +46,12 @@ interface LedgerEditFormProps {
 // groups, whose Edit form locks every field — its opening balance,
 // description, and balance type remain editable, since a business
 // legitimately needs to set its real starting cash-in-hand balance.
-export function LedgerEditForm({ ledger }: LedgerEditFormProps) {
+export function LedgerEditForm({
+  ledger,
+  action = updateLedgerAction,
+  listPath = "/accounting/ledgers",
+  entityLabel = "Ledger",
+}: LedgerEditFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const isNameLocked = ledger.isSystemDefined;
@@ -56,17 +68,17 @@ export function LedgerEditForm({ ledger }: LedgerEditFormProps) {
 
   async function handleSubmit(data: UpdateLedgerInput) {
     setIsSubmitting(true);
-    const result = await updateLedgerAction(ledger.id, data);
+    const result = await action(ledger.id, data);
     setIsSubmitting(false);
 
     if (result.success) {
-      toast.success("Ledger saved successfully.");
-      router.push("/accounting/ledgers");
+      toast.success(`${entityLabel} saved successfully.`);
+      router.push(listPath);
       router.refresh();
       return;
     }
 
-    toast.error(result.error ?? "Failed to save ledger.");
+    toast.error(result.error ?? `Failed to save ${entityLabel.toLowerCase()}.`);
   }
 
   return (
@@ -165,7 +177,7 @@ export function LedgerEditForm({ ledger }: LedgerEditFormProps) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/accounting/ledgers")}
+            onClick={() => router.push(listPath)}
             disabled={isSubmitting}
           >
             Cancel

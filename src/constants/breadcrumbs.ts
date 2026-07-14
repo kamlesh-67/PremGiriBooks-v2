@@ -13,6 +13,7 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   "ledger-groups": "Ledger Groups",
   ledgers: "Ledgers",
   banks: "Bank Management",
+  "expense-heads": "Expense Heads",
   settings: "Settings",
   users: "User Management",
   roles: "Roles & Permissions",

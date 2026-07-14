@@ -8,13 +8,15 @@ export interface DefaultLedgerGroupSeed {
 }
 
 // Named so other modules that must look up a specific default group by name
-// (14-ledger-master.md's "Cash" seeding under Cash-in-Hand, and its "Bank
-// Accounts" subtree exclusion) reference one shared constant instead of
-// re-typing the literal — a typo or rename here now fails those lookups
-// loudly (AppError) rather than silently, since both call sites throw when
-// the name doesn't resolve to an existing group.
+// (14-ledger-master.md's "Cash" seeding under Cash-in-Hand, its "Bank
+// Accounts" subtree exclusion, and 16-expense-heads.md's "Direct Expenses"/
+// "Indirect Expenses" subtree scoping) reference one shared constant instead
+// of re-typing the literal — a typo or rename here now fails those lookups
+// loudly rather than silently.
 export const CASH_IN_HAND_GROUP_NAME = "Cash-in-Hand";
 export const BANK_ACCOUNTS_GROUP_NAME = "Bank Accounts";
+export const DIRECT_EXPENSES_GROUP_NAME = "Direct Expenses";
+export const INDIRECT_EXPENSES_GROUP_NAME = "Indirect Expenses";
 
 // The standard Tally-class Indian-accounting chart-of-accounts skeleton every
 // company is seeded with — see 13-ledger-groups.md's Default Group Seeding
@@ -43,6 +45,6 @@ export const DEFAULT_LEDGER_GROUPS: readonly DefaultLedgerGroupSeed[] = [
   { name: "Direct Incomes", parent: null, nature: "INCOME", affectsGrossProfit: true },
   { name: "Indirect Incomes", parent: null, nature: "INCOME", affectsGrossProfit: false },
   { name: "Purchase Accounts", parent: null, nature: "EXPENSE", affectsGrossProfit: true },
-  { name: "Direct Expenses", parent: null, nature: "EXPENSE", affectsGrossProfit: true },
-  { name: "Indirect Expenses", parent: null, nature: "EXPENSE", affectsGrossProfit: false },
+  { name: DIRECT_EXPENSES_GROUP_NAME, parent: null, nature: "EXPENSE", affectsGrossProfit: true },
+  { name: INDIRECT_EXPENSES_GROUP_NAME, parent: null, nature: "EXPENSE", affectsGrossProfit: false },
 ];

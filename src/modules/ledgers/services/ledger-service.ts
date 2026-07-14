@@ -6,6 +6,7 @@ import { assertPermission } from "@/lib/permissions";
 import { ledgerGroupRepository } from "@/modules/ledger-groups/repositories/ledger-group-repository";
 import { ledgerRepository } from "@/modules/ledgers/repositories/ledger-repository";
 import { getBankAccountsSubtreeIds } from "@/modules/ledgers/utils/excluded-groups";
+import { getExpenseHeadGroupIds } from "@/modules/ledgers/utils/expense-head-groups";
 import { isUniqueConstraintError } from "@/modules/ledgers/utils/prisma-errors";
 import {
   createLedgerSchema,
@@ -27,6 +28,38 @@ function translatePersistError(error: unknown): never {
     throw new AppError("A ledger with this name already exists in this company.");
   }
   throw error;
+}
+
+interface CreateUnderGroupInput {
+  name: string;
+  openingBalance: number;
+  openingBalanceType: BalanceType;
+  description?: string | null;
+  isSystemDefined?: boolean;
+}
+
+// Module-level so both createUnderGroup (the raw primitive other services
+// compose into their own transactions) and createExpenseHead (which adds the
+// expense-subtree validation first) share one write path without the service
+// object referencing itself in its own initializer.
+function createLedgerUnderGroup(
+  companyId: string,
+  groupId: string,
+  input: CreateUnderGroupInput,
+  tx?: Prisma.TransactionClient
+): Promise<Ledger> {
+  return ledgerRepository.create(
+    companyId,
+    {
+      name: input.name,
+      ledgerGroupId: groupId,
+      openingBalance: input.openingBalance,
+      openingBalanceType: input.openingBalanceType,
+      description: input.description ?? null,
+      isSystemDefined: input.isSystemDefined ?? false,
+    },
+    tx
+  );
 }
 
 export const ledgerService = {
@@ -169,37 +202,126 @@ export const ledgerService = {
   },
 
   /**
-   * Primitive used by future modules (15-bank-management.md,
-   * 16-expense-heads.md, 17-income-heads.md) that have already resolved and
-   * validated their own ledgerGroupId — skips the generic Create Ledger
-   * screen's permission check and "Bank Accounts" exclusion, since the
-   * caller is itself an already-permission-gated service composing this as
-   * one step of its own atomic operation (e.g. a Ledger and a BankAccount
-   * row created together in one transaction).
+   * Primitive for other services (15-bank-management.md today, potentially
+   * 17-income-heads.md next) that have already resolved and validated their
+   * own ledgerGroupId — skips the generic Create Ledger screen's permission
+   * check and "Bank Accounts" exclusion, since the caller is itself an
+   * already-permission-gated service composing this as one step of its own
+   * atomic operation (e.g. a Ledger and a BankAccount row created together
+   * in one transaction). createExpenseHead below shares the same write path
+   * via the module-level createLedgerUnderGroup helper.
    */
   createUnderGroup(
     companyId: string,
     groupId: string,
-    input: {
-      name: string;
-      openingBalance: number;
-      openingBalanceType: BalanceType;
-      description?: string | null;
-      isSystemDefined?: boolean;
-    },
+    input: CreateUnderGroupInput,
     tx?: Prisma.TransactionClient
   ): Promise<Ledger> {
-    return ledgerRepository.create(
-      companyId,
-      {
-        name: input.name,
-        ledgerGroupId: groupId,
-        openingBalance: input.openingBalance,
-        openingBalanceType: input.openingBalanceType,
-        description: input.description ?? null,
-        isSystemDefined: input.isSystemDefined ?? false,
-      },
-      tx
-    );
+    return createLedgerUnderGroup(companyId, groupId, input, tx);
+  },
+
+  // ——— Expense Heads (16-expense-heads.md) ———
+  // An Expense Head is not a new entity — it is a Ledger whose group is
+  // "Direct Expenses"/"Indirect Expenses" or a descendant of either. These
+  // methods are the scoped query/create layer that spec adds on top of the
+  // generic Ledger operations above; Edit/Activate/Deactivate reuse
+  // updateLedger/activateLedger/deactivateLedger unchanged.
+
+  /**
+   * Ledgers under "Direct Expenses"/"Indirect Expenses" (or any descendant).
+   * Group membership is computed over ALL groups (not just active ones) so an
+   * existing expense head still lists after its group is deactivated.
+   */
+  async listExpenseHeads(filters: LedgerListFilters = {}): Promise<LedgerWithGroup[]> {
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "accounting", "view");
+
+    const groups = await ledgerGroupRepository.findMany(user.companyId, {});
+    const expenseGroupIds = getExpenseHeadGroupIds(groups);
+    if (expenseGroupIds.size === 0) {
+      return [];
+    }
+
+    const ledgers = await ledgerRepository.findMany(user.companyId, filters);
+    return ledgers.filter((ledger) => expenseGroupIds.has(ledger.ledgerGroupId));
+  },
+
+  /**
+   * Like getLedger, but additionally resolves to null when the ledger is not
+   * an expense head — the Expense Heads edit page must not open an arbitrary
+   * ledger (e.g. a bank ledger) just because the id was pasted into its URL.
+   */
+  async getExpenseHead(id: string): Promise<LedgerWithGroup | null> {
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "accounting", "view");
+
+    const ledger = await ledgerRepository.findById(id);
+    if (!ledger || ledger.companyId !== user.companyId) {
+      return null;
+    }
+
+    const groups = await ledgerGroupRepository.findMany(user.companyId, {});
+    if (!getExpenseHeadGroupIds(groups).has(ledger.ledgerGroupId)) {
+      return null;
+    }
+    return ledger;
+  },
+
+  /**
+   * Active groups within the "Direct Expenses"/"Indirect Expenses" subtrees,
+   * for the Expense Head form's Group selector. Computing the subtree over
+   * active groups only is safe: a group with any active child cannot be
+   * deactivated (13-ledger-groups.md), so an active descendant can never be
+   * orphaned from its root by an inactive intermediate parent.
+   */
+  async listSelectableLedgerGroupsForExpenseHead(): Promise<LedgerGroup[]> {
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "accounting", "view");
+
+    const groups = await ledgerGroupRepository.findMany(user.companyId, { status: "active" });
+    const expenseGroupIds = getExpenseHeadGroupIds(groups);
+    return groups.filter((group) => expenseGroupIds.has(group.id));
+  },
+
+  /**
+   * Thin wrapper over the createUnderGroup primitive that first validates the
+   * chosen group is an active, same-company member of the expense subtree —
+   * re-derived server-side from a fresh company-scoped group list, never
+   * trusting the client-filtered picker (mirrors createLedger's "Bank
+   * Accounts" check, inverted). A cross-company groupId can never appear in
+   * the company-scoped subtree set, so it is rejected before the write.
+   */
+  async createExpenseHead(input: CreateLedgerInput): Promise<Ledger> {
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "accounting", "create");
+
+    const data = createLedgerSchema.parse(input);
+
+    const [group, allGroups] = await Promise.all([
+      ledgerGroupRepository.findById(data.ledgerGroupId),
+      ledgerGroupRepository.findMany(user.companyId, {}),
+    ]);
+    if (!group || group.companyId !== user.companyId) {
+      throw new AppError("Ledger group not found.");
+    }
+    if (!group.isActive) {
+      throw new AppError("Cannot create an expense head under an inactive ledger group.");
+    }
+    if (!getExpenseHeadGroupIds(allGroups).has(group.id)) {
+      throw new AppError(
+        'An expense head must belong to "Direct Expenses" or "Indirect Expenses", or one of their sub-groups.'
+      );
+    }
+
+    try {
+      return await createLedgerUnderGroup(user.companyId, group.id, {
+        name: data.name,
+        openingBalance: data.openingBalance,
+        openingBalanceType: data.openingBalanceType,
+        description: data.description ?? null,
+      });
+    } catch (error) {
+      translatePersistError(error);
+    }
   },
 };
