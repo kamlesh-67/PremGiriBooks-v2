@@ -59,3 +59,13 @@ export type CompanyAdminInput = z.infer<typeof companyAdminSchema>;
 // (password reset stays its own separate action/flow).
 export const companyAdminProfileSchema = companyAdminSchema.omit({ password: true });
 export type CompanyAdminProfileInput = z.infer<typeof companyAdminProfileSchema>;
+
+// The combined "Save" input for the Company Admins edit panel — profile
+// fields plus the selected company, submitted as one call so
+// platformUserService.saveCompanyAdmin() can apply the profile update and
+// the (optional) company reassignment inside a single transaction, instead
+// of two separate non-atomic service calls.
+export const saveCompanyAdminSchema = companyAdminProfileSchema.extend({
+  companyId: z.string().min(1, "Company is required"),
+});
+export type SaveCompanyAdminInput = z.infer<typeof saveCompanyAdminSchema>;

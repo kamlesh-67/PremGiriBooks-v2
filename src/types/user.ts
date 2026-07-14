@@ -30,6 +30,7 @@ export type ReassignCompanyResult =
   | { status: "not_found" }
   | { status: "same_company" }
   | { status: "target_company_not_found" }
+  | { status: "target_company_inactive" }
   | { status: "target_role_not_found" }
   | { status: "last_active_admin" };
 

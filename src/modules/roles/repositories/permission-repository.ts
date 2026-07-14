@@ -1,13 +1,16 @@
 import { Prisma, type Permission } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { runInTransaction } from "@/lib/transaction";
 import { isRetryableTransactionError } from "@/modules/roles/utils/prisma-errors";
 import { hasOtherActiveFullCoverageRole } from "@/modules/roles/utils/role-coverage";
-import { withRetry } from "@/modules/roles/utils/with-retry";
 import type { AssignPermissionsResult, PermissionPair } from "@/types/role";
 
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
-const CONFLICT_MESSAGE = "This role's permissions were changed by another request. Please try again.";
+const SERIALIZABLE_RETRY = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  retryable: isRetryableTransactionError,
+  conflictMessage: "This role's permissions were changed by another request. Please try again.",
+};
 
 export const permissionRepository = {
   findCatalog(): Promise<Permission[]> {
@@ -72,45 +75,35 @@ export const permissionRepository = {
     companyId: string,
     permissionIds: string[]
   ): Promise<AssignPermissionsResult> {
-    return withRetry(
-      () =>
-        prisma.$transaction(async (tx) => {
-          const role = await tx.role.findUnique({
-            where: { id: roleId },
-            include: { _count: { select: { permissions: true } } },
-          });
-          if (!role || role.companyId !== companyId) {
-            return { status: "not_found" };
-          }
+    return runInTransaction(async (tx) => {
+      const role = await tx.role.findUnique({
+        where: { id: roleId },
+        include: { _count: { select: { permissions: true } } },
+      });
+      if (!role || role.companyId !== companyId) {
+        return { status: "not_found" };
+      }
 
-          const uniqueIds = Array.from(new Set(permissionIds));
-          const totalPermissions = await tx.permission.count();
-          const wasFullCoverage =
-            totalPermissions > 0 && role._count.permissions === totalPermissions;
-          const willBeFullCoverage = totalPermissions > 0 && uniqueIds.length === totalPermissions;
+      const uniqueIds = Array.from(new Set(permissionIds));
+      const totalPermissions = await tx.permission.count();
+      const wasFullCoverage = totalPermissions > 0 && role._count.permissions === totalPermissions;
+      const willBeFullCoverage = totalPermissions > 0 && uniqueIds.length === totalPermissions;
 
-          if (role.isActive && wasFullCoverage && !willBeFullCoverage) {
-            const stillHasFullCoverageRole = await hasOtherActiveFullCoverageRole(
-              tx,
-              companyId,
-              roleId
-            );
-            if (!stillHasFullCoverageRole) {
-              return { status: "last_full_coverage_role" };
-            }
-          }
+      if (role.isActive && wasFullCoverage && !willBeFullCoverage) {
+        const stillHasFullCoverageRole = await hasOtherActiveFullCoverageRole(tx, companyId, roleId);
+        if (!stillHasFullCoverageRole) {
+          return { status: "last_full_coverage_role" };
+        }
+      }
 
-          await tx.rolePermission.deleteMany({ where: { roleId } });
-          if (uniqueIds.length > 0) {
-            await tx.rolePermission.createMany({
-              data: uniqueIds.map((permissionId) => ({ roleId, permissionId })),
-            });
-          }
+      await tx.rolePermission.deleteMany({ where: { roleId } });
+      if (uniqueIds.length > 0) {
+        await tx.rolePermission.createMany({
+          data: uniqueIds.map((permissionId) => ({ roleId, permissionId })),
+        });
+      }
 
-          return { status: "ok" };
-        }, SERIALIZABLE),
-      isRetryableTransactionError,
-      CONFLICT_MESSAGE
-    );
+      return { status: "ok" };
+    }, SERIALIZABLE_RETRY);
   },
 };

@@ -1,7 +1,7 @@
 import { AppError } from "@/lib/app-error";
 import { getCurrentCompanyUser } from "@/lib/current-user";
 import { assertPermission } from "@/lib/permissions";
-import { prisma } from "@/lib/prisma";
+import { runInTransaction } from "@/lib/transaction";
 import { auditLogService } from "@/modules/administration/services/audit-log-service";
 import { ledgerGroupRepository } from "@/modules/ledger-groups/repositories/ledger-group-repository";
 import { getBankAccountsSubtreeIds } from "@/modules/ledgers/utils/excluded-groups";
@@ -95,7 +95,7 @@ export const bankAccountService = {
     }
 
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await runInTransaction(async (tx) => {
         const freshGroup = await tx.ledgerGroup.findUnique({ where: { id: data.ledgerGroupId } });
         if (!freshGroup?.isActive) {
           throw new AppError("Cannot create a bank account under an inactive ledger group.");
@@ -147,7 +147,7 @@ export const bankAccountService = {
     }
 
     try {
-      return await prisma.$transaction(async (tx) => {
+      return await runInTransaction(async (tx) => {
         const ledger = await ledgerRepository.update(
           existing.ledgerId,
           user.companyId,
@@ -195,7 +195,7 @@ export const bankAccountService = {
     const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", LIFECYCLE_ACTION);
 
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const result = await bankAccountRepository.activate(id, user.companyId, tx);
       switch (result.status) {
         case "not_found":
@@ -220,7 +220,7 @@ export const bankAccountService = {
     const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", LIFECYCLE_ACTION);
 
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const result = await bankAccountRepository.deactivate(id, user.companyId, tx);
       switch (result.status) {
         case "not_found":

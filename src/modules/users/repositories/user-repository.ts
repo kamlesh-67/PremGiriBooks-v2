@@ -3,6 +3,7 @@ import { Prisma, type Role } from "@prisma/client";
 import { AppError } from "@/lib/app-error";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { runInTransaction } from "@/lib/transaction";
 import { COMPANY_ADMIN_ROLE_NAME } from "@/constants/roles";
 import { isFullCoverageRole } from "@/modules/roles/utils/role-coverage";
 import type { UserProfileFields } from "@/modules/users/utils/normalize-user-input";
@@ -37,46 +38,28 @@ function assertHasRole<T extends { role: Role | null; companyId: string | null }
 const SAFE_INCLUDE = { role: true } as const;
 const SAFE_OMIT = { passwordHash: true } as const;
 
-const MAX_TRANSACTION_RETRIES = 3;
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
 const CONFLICT_MESSAGE = "This user was changed by another request. Please try again.";
 
 /**
- * Mirrors financial-year-repository.ts's withRetry — Serializable isolation
- * alone only detects a write-skew conflict, it doesn't resolve it, so the
- * "last active Administrator" count-then-write in updateProfile/deactivate
- * needs a bounded retry the same way "only one current financial year" does.
- *
- * Logs each retry and, if retries are exhausted, logs that too before
- * throwing CONFLICT_MESSAGE — otherwise repeated write-skew contention on
+ * Serializable isolation alone only detects a write-skew conflict, it
+ * doesn't resolve it, so the "last active Administrator" count-then-write in
+ * create/updateProfile/deactivate needs a bounded retry the same way "only
+ * one current financial year" does. Logs each retry and, if retries are
+ * exhausted, logs that too — otherwise repeated write-skew contention on
  * this table would be invisible to anything but the end user's error toast.
  */
-async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
-  for (let attempt = 1; attempt <= MAX_TRANSACTION_RETRIES; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (!isRetryableTransactionError(error)) {
-        throw error;
-      }
-
-      if (attempt === MAX_TRANSACTION_RETRIES) {
-        logger.error(
-          { attempt, maxAttempts: MAX_TRANSACTION_RETRIES },
-          "User transaction retries exhausted after repeated write-skew conflicts"
-        );
-        throw new AppError(CONFLICT_MESSAGE);
-      }
-
-      logger.warn(
-        { attempt, maxAttempts: MAX_TRANSACTION_RETRIES },
-        "Retrying user transaction after a write-skew conflict"
-      );
-    }
-  }
-
-  throw new AppError(CONFLICT_MESSAGE);
-}
+const SERIALIZABLE_RETRY = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  retryable: isRetryableTransactionError,
+  conflictMessage: CONFLICT_MESSAGE,
+  onRetry: (attempt: number, maxAttempts: number) =>
+    logger.warn({ attempt, maxAttempts }, "Retrying user transaction after a write-skew conflict"),
+  onRetriesExhausted: (attempt: number, maxAttempts: number) =>
+    logger.error(
+      { attempt, maxAttempts },
+      "User transaction retries exhausted after repeated write-skew conflicts"
+    ),
+};
 
 function buildWhere(companyId: string, filters: UserListFilters): Prisma.UserWhereInput {
   const where: Prisma.UserWhereInput = { companyId };
@@ -166,9 +149,9 @@ export const userRepository = {
    * use — companyService.createCompany() calls this from inside its own
    * transaction so the brand-new Company Admin User row commits (or rolls
    * back) atomically with the Company/Role/FinancialYear/Ledger rows.
-   * Defaults to opening its own Serializable-isolation + withRetry
-   * transaction for every other (non-transactional) caller, unchanged from
-   * before.
+   * Defaults to opening its own Serializable-isolation, retrying
+   * transaction (via runInTransaction) for every other (non-transactional)
+   * caller, unchanged from before.
    */
   create(
     companyId: string,
@@ -197,7 +180,7 @@ export const userRepository = {
     if (externalTx) {
       return run(externalTx);
     }
-    return withRetry(() => prisma.$transaction(run, SERIALIZABLE));
+    return runInTransaction(run, SERIALIZABLE_RETRY);
   },
 
   /**
@@ -210,7 +193,7 @@ export const userRepository = {
    * effect (zero such active users left) without ever going through the
    * dedicated deactivate path. This is name-independent (isFullCoverageRole
    * checks permission count, not "is this role named Company Admin") —
-   * see role-coverage.ts. Serializable + withRetry closes the write-skew
+   * see role-coverage.ts. runInTransaction's Serializable + retry option closes the write-skew
    * race where two concurrent role-reassignments away from full coverage
    * could each see the other's row as still-active and both pass the count
    * check.
@@ -221,65 +204,63 @@ export const userRepository = {
     profile: UserProfileFields,
     passwordHash: string | undefined
   ): Promise<UpdateUserResult> {
-    return withRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const existingRaw = await tx.user.findUnique({
-          where: { id },
-          include: SAFE_INCLUDE,
-          omit: SAFE_OMIT,
-        });
-        if (!existingRaw || existingRaw.companyId !== companyId) {
-          return { status: "not_found" };
+    return runInTransaction(async (tx) => {
+      const existingRaw = await tx.user.findUnique({
+        where: { id },
+        include: SAFE_INCLUDE,
+        omit: SAFE_OMIT,
+      });
+      if (!existingRaw || existingRaw.companyId !== companyId) {
+        return { status: "not_found" };
+      }
+      const existing = assertHasRole(existingRaw);
+
+      // Only checked when the role is actually changing — a no-op
+      // resubmission of the user's own already-inactive role (the Edit
+      // page merges it back into the Select for exactly this case) must
+      // keep working, per 11-role-permissions.md's "existing users keep
+      // functioning under a deactivated role" rule. Checked inside this
+      // same Serializable transaction, not a separate pre-write read, to
+      // close the identical TOCTOU window documented on create() above.
+      if (profile.roleId !== existing.roleId) {
+        const newRole = await tx.role.findUnique({ where: { id: profile.roleId } });
+        if (!newRole || newRole.companyId !== companyId) {
+          return { status: "invalid_role" };
         }
-        const existing = assertHasRole(existingRaw);
-
-        // Only checked when the role is actually changing — a no-op
-        // resubmission of the user's own already-inactive role (the Edit
-        // page merges it back into the Select for exactly this case) must
-        // keep working, per 11-role-permissions.md's "existing users keep
-        // functioning under a deactivated role" rule. Checked inside this
-        // same Serializable transaction, not a separate pre-write read, to
-        // close the identical TOCTOU window documented on create() above.
-        if (profile.roleId !== existing.roleId) {
-          const newRole = await tx.role.findUnique({ where: { id: profile.roleId } });
-          if (!newRole || newRole.companyId !== companyId) {
-            return { status: "invalid_role" };
-          }
-          if (!newRole.isActive) {
-            return { status: "inactive_role" };
-          }
+        if (!newRole.isActive) {
+          return { status: "inactive_role" };
         }
+      }
 
-        const losesFullCoverage =
-          existing.isActive &&
-          profile.roleId !== existing.roleId &&
-          (await isFullCoverageRole(tx, existing.role.id));
+      const losesFullCoverage =
+        existing.isActive &&
+        profile.roleId !== existing.roleId &&
+        (await isFullCoverageRole(tx, existing.role.id));
 
-        if (losesFullCoverage) {
-          const stillHasOtherFullCoverageUser = await hasOtherActiveFullCoverageUser(
-            tx,
-            companyId,
-            id
-          );
-          if (!stillHasOtherFullCoverageUser) {
-            return { status: "last_active_admin" };
-          }
+      if (losesFullCoverage) {
+        const stillHasOtherFullCoverageUser = await hasOtherActiveFullCoverageUser(
+          tx,
+          companyId,
+          id
+        );
+        if (!stillHasOtherFullCoverageUser) {
+          return { status: "last_active_admin" };
         }
+      }
 
-        const updated = await tx.user.update({
-          where: { id },
-          data: { ...profile, ...(passwordHash ? { passwordHash } : {}) },
-          include: SAFE_INCLUDE,
-          omit: SAFE_OMIT,
-        });
+      const updated = await tx.user.update({
+        where: { id },
+        data: { ...profile, ...(passwordHash ? { passwordHash } : {}) },
+        include: SAFE_INCLUDE,
+        omit: SAFE_OMIT,
+      });
 
-        return { status: "ok", user: assertHasRole(updated) };
-      }, SERIALIZABLE)
-    );
+      return { status: "ok", user: assertHasRole(updated) };
+    }, SERIALIZABLE_RETRY);
   },
 
   async setActive(id: string, companyId: string, isActive: boolean): Promise<UserWithRole | null> {
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const existing = await tx.user.findUnique({ where: { id } });
       if (!existing || existing.companyId !== companyId) {
         return null;
@@ -327,7 +308,9 @@ export const userRepository = {
    * Role is per-company (their old roleId doesn't exist in the target
    * company). Assigns them the target company's own Company Admin role
    * (looked up by name, not carried over by id) rather than leaving them
-   * roleless. Enforces the same "at least one active full-coverage user
+   * roleless. Rejects a target company that's inactive, same as every other
+   * "can't act on/into a deactivated company" rule elsewhere in this
+   * codebase. Enforces the same "at least one active full-coverage user
    * must remain per company" invariant setActiveById/deactivate() do,
    * against the *source* company — reassigning away has the identical
    * end-state (one fewer active full-coverage user there) as deactivating.
@@ -357,6 +340,9 @@ export const userRepository = {
     const targetCompany = await client.company.findUnique({ where: { id: targetCompanyId } });
     if (!targetCompany) {
       return { status: "target_company_not_found" };
+    }
+    if (!targetCompany.isActive) {
+      return { status: "target_company_inactive" };
     }
 
     const targetRole = await client.role.findUnique({
@@ -487,59 +473,57 @@ export const userRepository = {
   /**
    * Deactivation bundles the tenant-isolation check, the "last active
    * full-coverage user" check, and the "not self" business-rule check into
-   * the same Serializable transaction as the write. Serializable +
-   * withRetry closes the write-skew race two independent count-then-write
-   * queries would otherwise leave open — e.g. two full-coverage users, X
-   * and Y, deactivating each other at nearly the same moment: under plain
-   * Read Committed each transaction's count would see the other still
-   * active and both would pass, leaving zero active full-coverage users.
-   * Serializable isolation makes Postgres abort one of the two with a
-   * write-skew conflict, which withRetry surfaces as "please try again"
-   * rather than silently allowing it.
+   * the same Serializable transaction as the write. runInTransaction's
+   * Serializable + retry option closes the write-skew race two independent
+   * count-then-write queries would otherwise leave open — e.g. two
+   * full-coverage users, X and Y, deactivating each other at nearly the same
+   * moment: under plain Read Committed each transaction's count would see
+   * the other still active and both would pass, leaving zero active
+   * full-coverage users. Serializable isolation makes Postgres abort one of
+   * the two with a write-skew conflict, which the retry option surfaces as
+   * "please try again" rather than silently allowing it.
    */
   async deactivate(
     id: string,
     companyId: string,
     requestedById: string
   ): Promise<DeactivateUserResult> {
-    return withRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const userRaw = await tx.user.findUnique({
-          where: { id },
-          include: SAFE_INCLUDE,
-          omit: SAFE_OMIT,
-        });
-        if (!userRaw || userRaw.companyId !== companyId) {
-          return { status: "not_found" };
+    return runInTransaction(async (tx) => {
+      const userRaw = await tx.user.findUnique({
+        where: { id },
+        include: SAFE_INCLUDE,
+        omit: SAFE_OMIT,
+      });
+      if (!userRaw || userRaw.companyId !== companyId) {
+        return { status: "not_found" };
+      }
+      const user = assertHasRole(userRaw);
+
+      if (id === requestedById) {
+        return { status: "self" };
+      }
+
+      if (user.isActive && (await isFullCoverageRole(tx, user.role.id))) {
+        const stillHasOtherFullCoverageUser = await hasOtherActiveFullCoverageUser(
+          tx,
+          user.companyId,
+          id
+        );
+
+        if (!stillHasOtherFullCoverageUser) {
+          return { status: "last_active_admin" };
         }
-        const user = assertHasRole(userRaw);
+      }
 
-        if (id === requestedById) {
-          return { status: "self" };
-        }
+      const updated = await tx.user.update({
+        where: { id },
+        data: { isActive: false },
+        include: SAFE_INCLUDE,
+        omit: SAFE_OMIT,
+      });
 
-        if (user.isActive && (await isFullCoverageRole(tx, user.role.id))) {
-          const stillHasOtherFullCoverageUser = await hasOtherActiveFullCoverageUser(
-            tx,
-            user.companyId,
-            id
-          );
-
-          if (!stillHasOtherFullCoverageUser) {
-            return { status: "last_active_admin" };
-          }
-        }
-
-        const updated = await tx.user.update({
-          where: { id },
-          data: { isActive: false },
-          include: SAFE_INCLUDE,
-          omit: SAFE_OMIT,
-        });
-
-        return { status: "ok", user: assertHasRole(updated) };
-      }, SERIALIZABLE)
-    );
+      return { status: "ok", user: assertHasRole(updated) };
+    }, SERIALIZABLE_RETRY);
   },
 };
 

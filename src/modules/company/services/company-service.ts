@@ -2,7 +2,7 @@ import { AppError } from "@/lib/app-error";
 import { getCurrentCompanyUser, getCurrentSuperAdmin, getCurrentUser } from "@/lib/current-user";
 import { assertPermission } from "@/lib/permissions";
 import { hashPassword } from "@/lib/password";
-import { prisma } from "@/lib/prisma";
+import { runInTransaction } from "@/lib/transaction";
 import { auditLogService } from "@/modules/administration/services/audit-log-service";
 import { tenantBootstrapService } from "@/modules/administration/services/tenant-bootstrap-service";
 import { createCompanySchema, type CreateCompanyInput } from "@/modules/administration/validation/create-company-schema";
@@ -80,7 +80,7 @@ export const companyService = {
     const companyData = normalizeCompanyInput(companySchema.parse(data.company));
     const passwordHash = await hashPassword(data.companyAdmin.password);
 
-    const company = await prisma.$transaction(async (tx) => {
+    const company = await runInTransaction(async (tx) => {
       const company = await companyRepository.create(companyData, tx);
 
       const { companyAdminRoleId } = await tenantBootstrapService.bootstrapTenant(
@@ -144,7 +144,7 @@ export const companyService = {
     const actor = await getCurrentSuperAdmin();
     const data = normalizeCompanyInput(companySchema.parse(input));
 
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const company = await companyRepository.update(id, data, tx);
       if (!company) {
         throw new AppError("Company not found.");
@@ -216,7 +216,7 @@ export const companyService = {
 
   async activateCompany(id: string): Promise<CompanyWithSettings> {
     const actor = await getCurrentSuperAdmin();
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const company = await companyRepository.setActive(id, true, tx);
       if (!company) {
         throw new AppError("Company not found.");
@@ -237,7 +237,7 @@ export const companyService = {
 
   async deactivateCompany(id: string): Promise<CompanyWithSettings> {
     const actor = await getCurrentSuperAdmin();
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const company = await companyRepository.setActive(id, false, tx);
       if (!company) {
         throw new AppError("Company not found.");

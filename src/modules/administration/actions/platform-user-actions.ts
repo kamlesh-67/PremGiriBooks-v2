@@ -11,7 +11,7 @@ import {
   PASSWORD_MIN_LENGTH,
 } from "@/constants/password-policy";
 import { platformUserService } from "@/modules/administration/services/platform-user-service";
-import type { CompanyAdminProfileInput } from "@/modules/administration/validation/create-company-schema";
+import type { SaveCompanyAdminInput } from "@/modules/administration/validation/create-company-schema";
 import type { ActionResult } from "@/types/api";
 
 const resetPasswordSchema = z
@@ -34,26 +34,12 @@ export async function resetCompanyAdminPasswordAction(
   return { success: true };
 }
 
-export async function updateCompanyAdminProfileAction(
+export async function saveCompanyAdminAction(
   userId: string,
-  input: CompanyAdminProfileInput
+  input: SaveCompanyAdminInput
 ): Promise<ActionResult<undefined>> {
   try {
-    await platformUserService.updateCompanyAdminProfile(userId, input);
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
-
-  revalidatePath("/administration/company-admins");
-  return { success: true };
-}
-
-export async function reassignCompanyAdminAction(
-  userId: string,
-  targetCompanyId: string
-): Promise<ActionResult<undefined>> {
-  try {
-    await platformUserService.reassignCompanyAdmin(userId, targetCompanyId);
+    await platformUserService.saveCompanyAdmin(userId, input);
   } catch (error) {
     return { success: false, error: toActionErrorMessage(error) };
   }

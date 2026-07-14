@@ -2,6 +2,7 @@ import { Prisma, type Ledger as PrismaLedger, type LedgerGroup } from "@prisma/c
 
 import { AppError } from "@/lib/app-error";
 import { prisma } from "@/lib/prisma";
+import { runInTransaction } from "@/lib/transaction";
 import { CASH_IN_HAND_GROUP_NAME } from "@/modules/ledger-groups/constants/default-groups";
 import { isRecordNotFoundError } from "@/modules/ledgers/utils/prisma-errors";
 import type {
@@ -135,11 +136,11 @@ export const ledgerRepository = {
       }
     };
 
-    return client ? run(client) : prisma.$transaction(run);
+    return client ? run(client) : runInTransaction(run);
   },
 
   async activate(id: string, companyId: string): Promise<ActivateLedgerResult> {
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const existing = await tx.ledger.findUnique({ where: { id } });
       if (!existing || existing.companyId !== companyId) {
         return { status: "not_found" };
@@ -154,7 +155,7 @@ export const ledgerRepository = {
   // way a LedgerGroup does — so no Serializable isolation/retry is needed,
   // unlike ledger-group-repository.ts's deactivate().
   async deactivate(id: string, companyId: string): Promise<DeactivateLedgerResult> {
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const existing = await tx.ledger.findUnique({ where: { id } });
       if (!existing || existing.companyId !== companyId) {
         return { status: "not_found" };

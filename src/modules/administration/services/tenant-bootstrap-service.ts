@@ -1,14 +1,19 @@
 import type { Prisma } from "@prisma/client";
 
 import { AppError } from "@/lib/app-error";
+import { domainEvents } from "@/lib/domain-events";
+import { DOMAIN_EVENTS } from "@/constants/domain-events";
 import { roleService } from "@/modules/roles/services/role-service";
-import { ledgerGroupService } from "@/modules/ledger-groups/services/ledger-group-service";
-import { ledgerService } from "@/modules/ledgers/services/ledger-service";
 import { normalizeFinancialYearInput } from "@/modules/financial-year/utils/normalize-financial-year-input";
 import {
   financialYearSchema,
   type FinancialYearInput,
 } from "@/modules/financial-year/validation/financial-year-schema";
+// Side-effect import: registers every module's "company.bootstrapped"
+// handler (currently ledger-groups + ledgers default seeding) without this
+// file needing to import those services directly — see that file's comment
+// (Architecture Improvement Recommendations #3, Internal Domain Events).
+import "@/modules/administration/services/tenant-bootstrap-events";
 
 export interface BootstrapTenantResult {
   companyAdminRoleId: string;
@@ -51,8 +56,11 @@ export const tenantBootstrapService = {
 
     const { companyAdminRoleId } = await roleService.seedDefaultRoles(companyId, tx);
 
-    await ledgerGroupService.seedDefaultGroups(companyId, tx);
-    await ledgerService.seedDefaultLedger(companyId, tx);
+    // Ledger Groups + default Ledger seeding — pure side effects with no
+    // return value this function needs — are decoupled from this module via
+    // a domain event; see tenant-bootstrap-events.ts for the registered
+    // handlers and their required ordering.
+    await domainEvents.emit(DOMAIN_EVENTS.COMPANY_BOOTSTRAPPED, { companyId }, { tx });
 
     return { companyAdminRoleId };
   },

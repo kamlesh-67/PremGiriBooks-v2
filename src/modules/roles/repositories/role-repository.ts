@@ -1,13 +1,16 @@
 import { Prisma, type Role } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { runInTransaction } from "@/lib/transaction";
 import { hasOtherActiveFullCoverageRole, isFullCoverageRole } from "@/modules/roles/utils/role-coverage";
 import { isRecordNotFoundError, isRetryableTransactionError } from "@/modules/roles/utils/prisma-errors";
-import { withRetry } from "@/modules/roles/utils/with-retry";
 import type { DeactivateRoleResult, RoleWithPermissionCount } from "@/types/role";
 
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
-const CONFLICT_MESSAGE = "This role was changed by another request. Please try again.";
+const SERIALIZABLE_RETRY = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  retryable: isRetryableTransactionError,
+  conflictMessage: "This role was changed by another request. Please try again.",
+};
 
 export const roleRepository = {
   findMany(companyId: string): Promise<RoleWithPermissionCount[]> {
@@ -104,39 +107,34 @@ export const roleRepository = {
    * since it is always both protected and full-coverage. The invariant
    * still guards any *other* role a company might have granted full
    * coverage to (a custom role, or in principle a future non-reserved
-   * full-access role). Serializable + withRetry closes the same write-skew
+   * full-access role). runInTransaction's Serializable + retry option closes the same write-skew
    * race documented previously: two concurrent deactivations of two
    * different full-coverage roles could each see the other as still-active
    * under plain Read Committed and both pass.
    */
   deactivate(id: string, companyId: string): Promise<DeactivateRoleResult> {
-    return withRetry(
-      () =>
-        prisma.$transaction(async (tx) => {
-          const role = await tx.role.findUnique({ where: { id } });
-          if (!role || role.companyId !== companyId) {
-            return { status: "not_found" };
-          }
+    return runInTransaction(async (tx) => {
+      const role = await tx.role.findUnique({ where: { id } });
+      if (!role || role.companyId !== companyId) {
+        return { status: "not_found" };
+      }
 
-          if (role.isProtected) {
-            return { status: "protected" };
-          }
+      if (role.isProtected) {
+        return { status: "protected" };
+      }
 
-          if (role.isActive) {
-            const isFullCoverage = await isFullCoverageRole(tx, id);
-            if (isFullCoverage) {
-              const stillHasFullCoverageRole = await hasOtherActiveFullCoverageRole(tx, companyId, id);
-              if (!stillHasFullCoverageRole) {
-                return { status: "last_full_coverage_role" };
-              }
-            }
+      if (role.isActive) {
+        const isFullCoverage = await isFullCoverageRole(tx, id);
+        if (isFullCoverage) {
+          const stillHasFullCoverageRole = await hasOtherActiveFullCoverageRole(tx, companyId, id);
+          if (!stillHasFullCoverageRole) {
+            return { status: "last_full_coverage_role" };
           }
+        }
+      }
 
-          const updated = await tx.role.update({ where: { id }, data: { isActive: false } });
-          return { status: "ok", role: updated };
-        }, SERIALIZABLE),
-      isRetryableTransactionError,
-      CONFLICT_MESSAGE
-    );
+      const updated = await tx.role.update({ where: { id }, data: { isActive: false } });
+      return { status: "ok", role: updated };
+    }, SERIALIZABLE_RETRY);
   },
 };

@@ -22,10 +22,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  reassignCompanyAdminAction,
   resetCompanyAdminPasswordAction,
+  saveCompanyAdminAction,
   setCompanyAdminActiveAction,
-  updateCompanyAdminProfileAction,
 } from "@/modules/administration/actions/platform-user-actions";
 import type { CompanyAdminSummary } from "@/types/user";
 
@@ -93,11 +92,9 @@ export function CompanyAdminTable({ companyAdmins, companies }: CompanyAdminTabl
   }
 
   function toggleEditTarget(admin: CompanyAdminSummary) {
-    setEditTargetId((current) => {
-      const next = current === admin.id ? null : admin.id;
-      setProfileDraft(next ? toProfileDraft(admin) : null);
-      return next;
-    });
+    const next = editTargetId === admin.id ? null : admin.id;
+    setEditTargetId(next);
+    setProfileDraft(next ? toProfileDraft(admin) : null);
     setResetTargetId(null);
     setNewPassword("");
   }
@@ -108,29 +105,19 @@ export function CompanyAdminTable({ companyAdmins, companies }: CompanyAdminTabl
     }
     setPendingId(admin.id);
 
-    const profileResult = await updateCompanyAdminProfileAction(admin.id, {
+    // One call, one transaction — the profile fields and the (optional)
+    // company reassignment either both apply or both roll back together.
+    const result = await saveCompanyAdminAction(admin.id, {
       username: profileDraft.username,
       fullName: profileDraft.fullName,
       email: profileDraft.email,
       mobile: profileDraft.mobile ? profileDraft.mobile : undefined,
+      companyId: profileDraft.companyId,
     });
-    if (!profileResult.success) {
-      setPendingId(null);
-      toast.error(profileResult.error ?? "Failed to save Company Admin.");
+    setPendingId(null);
+    if (!result.success) {
+      toast.error(result.error ?? "Failed to save Company Admin.");
       return;
-    }
-
-    // Reassignment is a separate service call (a company move, not a profile
-    // field) — only fired when the selected company actually changed.
-    if (profileDraft.companyId !== admin.companyId) {
-      const reassignResult = await reassignCompanyAdminAction(admin.id, profileDraft.companyId);
-      setPendingId(null);
-      if (!reassignResult.success) {
-        toast.error(reassignResult.error ?? "Failed to move Company Admin to the new company.");
-        return;
-      }
-    } else {
-      setPendingId(null);
     }
 
     toast.success(`${profileDraft.fullName} saved.`);
@@ -213,6 +200,7 @@ export function CompanyAdminTable({ companyAdmins, companies }: CompanyAdminTabl
                 <TableCell colSpan={5}>
                   <div className="grid grid-cols-1 gap-2 py-2 sm:grid-cols-5">
                     <Input
+                      aria-label="Username"
                       placeholder="Username"
                       value={profileDraft.username}
                       onChange={(event) =>
@@ -222,6 +210,7 @@ export function CompanyAdminTable({ companyAdmins, companies }: CompanyAdminTabl
                       }
                     />
                     <Input
+                      aria-label="Full name"
                       placeholder="Full name"
                       value={profileDraft.fullName}
                       onChange={(event) =>
@@ -231,6 +220,7 @@ export function CompanyAdminTable({ companyAdmins, companies }: CompanyAdminTabl
                       }
                     />
                     <Input
+                      aria-label="Email"
                       type="email"
                       placeholder="Email"
                       value={profileDraft.email}
@@ -241,6 +231,7 @@ export function CompanyAdminTable({ companyAdmins, companies }: CompanyAdminTabl
                       }
                     />
                     <Input
+                      aria-label="Mobile"
                       placeholder="Mobile"
                       value={profileDraft.mobile}
                       onChange={(event) =>
@@ -258,7 +249,7 @@ export function CompanyAdminTable({ companyAdmins, companies }: CompanyAdminTabl
                         setProfileDraft((current) => (current ? { ...current, companyId } : current));
                       }}
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger aria-label="Company" className="w-full">
                         <SelectValue placeholder="Company" />
                       </SelectTrigger>
                       <SelectContent>

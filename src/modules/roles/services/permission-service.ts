@@ -24,6 +24,12 @@ function indexCatalogByPair(catalog: Permission[]): Map<string, string> {
   return new Map(catalog.map((permission) => [`${permission.module}:${permission.action}`, permission.id]));
 }
 
+// Bounds ensureCatalog()'s per-company backfill so it doesn't run fully
+// sequentially (slow as companies grow) or fully in parallel (could exhaust
+// the Postgres connection pool on a large install) — a small fixed batch
+// size, not a new dependency, since this is the only call site.
+const CATALOG_BACKFILL_BATCH_SIZE = 5;
+
 /**
  * The mandatory (non-removable) permission pairs for a protected reserved
  * role, by name — Company Admin's mandatory set is "the entire live
@@ -146,8 +152,11 @@ export const permissionService = {
     const catalogIds = catalog.map((permission) => permission.id);
 
     const companyAdminRoles = await roleRepository.findAllProtectedByName(COMPANY_ADMIN_ROLE_NAME);
-    for (const role of companyAdminRoles) {
-      await permissionRepository.seedRolePermissions(role.id, catalogIds);
+    for (let i = 0; i < companyAdminRoles.length; i += CATALOG_BACKFILL_BATCH_SIZE) {
+      const batch = companyAdminRoles.slice(i, i + CATALOG_BACKFILL_BATCH_SIZE);
+      await Promise.all(
+        batch.map((role) => permissionRepository.seedRolePermissions(role.id, catalogIds))
+      );
     }
   },
 };
