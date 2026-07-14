@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { getBankAccountsSubtreeIds } from "@/modules/ledgers/utils/excluded-groups";
 import { getExpenseHeadGroupIds } from "@/modules/ledgers/utils/expense-head-groups";
+import { getIncomeHeadGroupIds } from "@/modules/ledgers/utils/income-head-groups";
 import { getGroupSubtreeIds } from "@/modules/ledgers/utils/group-subtree";
 import type { LedgerGroup } from "@/types/ledger-group";
 
@@ -57,6 +58,21 @@ describe("getExpenseHeadGroupIds", () => {
     expect(ids.has("direct")).toBe(true);
     expect(ids.has("purchase")).toBe(false);
     expect(ids.has("purchase-child")).toBe(false);
+  });
+});
+
+describe("getIncomeHeadGroupIds", () => {
+  it('never includes "Sales Accounts" even though its nature is also INCOME', () => {
+    const groups = [
+      makeGroup("direct", "Direct Incomes", null),
+      makeGroup("indirect", "Indirect Incomes", null),
+      makeGroup("commission", "Commission Received", "indirect"),
+      makeGroup("sales", "Sales Accounts", null),
+      makeGroup("sales-child", "Export Sales", "sales"),
+    ];
+
+    const ids = getIncomeHeadGroupIds(groups);
+    expect(ids).toEqual(new Set(["direct", "indirect", "commission"]));
   });
 });
 
