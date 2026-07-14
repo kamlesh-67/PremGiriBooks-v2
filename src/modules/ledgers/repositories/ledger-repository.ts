@@ -84,10 +84,11 @@ export const ledgerRepository = {
   },
 
   // Accepts an optional transaction client so ledgerService.seedDefaultLedger
-  // and ledgerService.createUnderGroup (the primitive 15-bank-management.md,
-  // 16-expense-heads.md, and 17-income-heads.md will each call) can
-  // participate in a larger atomic unit of work — defaults to the plain
-  // client for the generic Create Ledger screen's non-transactional caller.
+  // and ledgerService.createUnderGroup (the shared write path
+  // 15-bank-management.md, 16-expense-heads.md, and 17-income-heads.md each
+  // call through) can participate in a larger atomic unit of work — defaults
+  // to the plain client for the generic Create Ledger screen's
+  // non-transactional caller.
   async create(
     companyId: string,
     data: LedgerCreateData,
