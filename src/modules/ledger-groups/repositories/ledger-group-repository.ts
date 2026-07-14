@@ -105,7 +105,13 @@ export const ledgerGroupRepository = {
   // Also checks the parent (if any) is active in the same transaction —
   // reactivating a child under a still-inactive parent would reach exactly
   // the "active child under an inactive parent" state deactivate()'s own
-  // "no active children" invariant exists to prevent.
+  // "no active children" invariant exists to prevent. Same
+  // Serializable + retry protection as deactivate() below, for the mirror
+  // image of its race: without it, a concurrent deactivate() of this same
+  // parent could pass its own "no active children" check (this child not
+  // yet active) and commit its parent-inactive write around the same time
+  // this activate's read of the parent's isActive status, letting an active
+  // child end up under an inactive parent after all.
   async activate(id: string, companyId: string): Promise<ActivateLedgerGroupResult> {
     return runInTransaction(async (tx) => {
       const existing = await tx.ledgerGroup.findUnique({ where: { id } });
@@ -122,7 +128,7 @@ export const ledgerGroupRepository = {
 
       const ledgerGroup = await tx.ledgerGroup.update({ where: { id }, data: { isActive: true } });
       return { status: "ok", ledgerGroup };
-    });
+    }, SERIALIZABLE_RETRY);
   },
 
   /**

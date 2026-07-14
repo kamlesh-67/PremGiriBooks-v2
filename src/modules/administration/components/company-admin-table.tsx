@@ -241,6 +241,15 @@ export function CompanyAdminTable({ companyAdmins, companies }: CompanyAdminTabl
                       }
                     />
                     <Select
+                      // `items` lets <SelectValue> resolve the trigger's
+                      // label (company name) up front — without it, Base UI
+                      // only knows an option's label once its <SelectItem>
+                      // has actually mounted (i.e. after the popup has been
+                      // opened at least once), so the trigger would show the
+                      // raw companyId until then.
+                      items={Object.fromEntries(
+                        companyOptionsFor(admin).map((company) => [company.id, company.companyName])
+                      )}
                       value={profileDraft.companyId}
                       onValueChange={(companyId) => {
                         if (!companyId) {
