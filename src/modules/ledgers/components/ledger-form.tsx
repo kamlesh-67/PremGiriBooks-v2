@@ -32,6 +32,12 @@ import type { Ledger } from "@/types/ledger";
 interface LedgerFormProps {
   groups: LedgerGroup[];
   onSubmit: (data: CreateLedgerInput) => Promise<ActionResult<Ledger>>;
+  /** List route to return to on Cancel / after a successful create. */
+  listPath?: string;
+  /** Noun used in the submit button and toasts, e.g. "Expense Head". */
+  entityLabel?: string;
+  /** Helper text under the Ledger Group picker; null hides it. */
+  groupHelperText?: string | null;
 }
 
 const DEFAULT_VALUES: CreateLedgerInput = {
@@ -41,7 +47,16 @@ const DEFAULT_VALUES: CreateLedgerInput = {
   openingBalanceType: "DEBIT",
 };
 
-export function LedgerForm({ groups, onSubmit }: LedgerFormProps) {
+const DEFAULT_GROUP_HELPER_TEXT =
+  'Ledgers under "Bank Accounts" can only be created through Bank Management.';
+
+export function LedgerForm({
+  groups,
+  onSubmit,
+  listPath = "/accounting/ledgers",
+  entityLabel = "Ledger",
+  groupHelperText = DEFAULT_GROUP_HELPER_TEXT,
+}: LedgerFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -56,13 +71,13 @@ export function LedgerForm({ groups, onSubmit }: LedgerFormProps) {
     setIsSubmitting(false);
 
     if (result.success) {
-      toast.success("Ledger created successfully.");
-      router.push("/accounting/ledgers");
+      toast.success(`${entityLabel} created successfully.`);
+      router.push(listPath);
       router.refresh();
       return;
     }
 
-    toast.error(result.error ?? "Failed to create ledger.");
+    toast.error(result.error ?? `Failed to create ${entityLabel.toLowerCase()}.`);
   }
 
   return (
@@ -95,10 +110,9 @@ export function LedgerForm({ groups, onSubmit }: LedgerFormProps) {
                 allowNone={false}
                 placeholder="Select a ledger group"
               />
-              <p className="text-xs text-muted-foreground">
-                Ledgers under &quot;Bank Accounts&quot; can only be created through Bank
-                Management.
-              </p>
+              {groupHelperText ? (
+                <p className="text-xs text-muted-foreground">{groupHelperText}</p>
+              ) : null}
               <FormMessage />
             </FormItem>
           )}
@@ -166,13 +180,13 @@ export function LedgerForm({ groups, onSubmit }: LedgerFormProps) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/accounting/ledgers")}
+            onClick={() => router.push(listPath)}
             disabled={isSubmitting}
           >
             Cancel
           </Button>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Saving…" : "Create Ledger"}
+            {isSubmitting ? "Saving…" : `Create ${entityLabel}`}
           </Button>
         </div>
       </form>

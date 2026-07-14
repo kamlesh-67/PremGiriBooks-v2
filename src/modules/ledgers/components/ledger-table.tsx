@@ -17,30 +17,47 @@ import {
 } from "@/components/ui/table";
 import { activateLedgerAction, deactivateLedgerAction } from "@/modules/ledgers/actions/ledger-actions";
 import { LedgerStatusBadge } from "@/modules/ledgers/components/ledger-status-badge";
-import type { LedgerWithGroup } from "@/types/ledger";
+import type { ActionResult } from "@/types/api";
+import type { Ledger, LedgerWithGroup } from "@/types/ledger";
 
 interface LedgerTableProps {
   ledgers: LedgerWithGroup[];
   canEdit?: boolean;
   canManage?: boolean;
+  /** Route prefix the Edit link points at; defaults to the generic Ledger screens. */
+  editBasePath?: string;
+  /** Noun used in toasts and the empty state, e.g. "Expense Head". */
+  entityLabel?: string;
+  /** Server Actions for the status toggle; default to the generic Ledger ones. */
+  activateAction?: (id: string) => Promise<ActionResult<Ledger>>;
+  deactivateAction?: (id: string) => Promise<ActionResult<Ledger>>;
 }
 
-export function LedgerTable({ ledgers, canEdit = false, canManage = false }: LedgerTableProps) {
+export function LedgerTable({
+  ledgers,
+  canEdit = false,
+  canManage = false,
+  editBasePath = "/accounting/ledgers",
+  entityLabel = "Ledger",
+  activateAction = activateLedgerAction,
+  deactivateAction = deactivateLedgerAction,
+}: LedgerTableProps) {
   const [pendingId, setPendingId] = React.useState<string | null>(null);
+  const entityLower = entityLabel.toLowerCase();
 
   async function handleToggleActive(ledger: LedgerWithGroup) {
     setPendingId(ledger.id);
-    const action = ledger.isActive ? deactivateLedgerAction : activateLedgerAction;
+    const action = ledger.isActive ? deactivateAction : activateAction;
 
     try {
       const result = await action(ledger.id);
       if (!result.success) {
-        toast.error(result.error ?? "Failed to update ledger status.");
+        toast.error(result.error ?? `Failed to update ${entityLower} status.`);
         return;
       }
-      toast.success(ledger.isActive ? "Ledger deactivated." : "Ledger activated.");
+      toast.success(ledger.isActive ? `${entityLabel} deactivated.` : `${entityLabel} activated.`);
     } catch {
-      toast.error("Failed to update ledger status.");
+      toast.error(`Failed to update ${entityLower} status.`);
     } finally {
       setPendingId(null);
     }
@@ -49,7 +66,7 @@ export function LedgerTable({ ledgers, canEdit = false, canManage = false }: Led
   if (ledgers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-16 text-center">
-        <p className="text-sm text-muted-foreground">No ledgers found.</p>
+        <p className="text-sm text-muted-foreground">No {entityLower}s found.</p>
       </div>
     );
   }
@@ -89,7 +106,7 @@ export function LedgerTable({ ledgers, canEdit = false, canManage = false }: Led
                     size="icon-sm"
                     nativeButton={false}
                     render={
-                      <Link href={`/accounting/ledgers/${ledger.id}/edit`} aria-label="Edit ledger">
+                      <Link href={`${editBasePath}/${ledger.id}/edit`} aria-label={`Edit ${entityLower}`}>
                         <Pencil size={16} />
                       </Link>
                     }

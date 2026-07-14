@@ -1,4 +1,5 @@
 import { BANK_ACCOUNTS_GROUP_NAME } from "@/modules/ledger-groups/constants/default-groups";
+import { getGroupSubtreeIds } from "@/modules/ledgers/utils/group-subtree";
 import type { LedgerGroup } from "@/types/ledger-group";
 
 /**
@@ -27,22 +28,5 @@ export function getBankAccountsSubtreeIds(groups: LedgerGroup[]): Set<string> {
   // "Bank Accounts" is itself a child group (of "Current Assets" in
   // 13-ledger-groups.md's default seed data), not top-level — match by name
   // alone rather than assuming any particular position in the hierarchy.
-  const bankAccountsGroup = groups.find((group) => group.name === BANK_ACCOUNTS_GROUP_NAME);
-  if (!bankAccountsGroup) {
-    return new Set();
-  }
-
-  const excludedIds = new Set<string>([bankAccountsGroup.id]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const group of groups) {
-      if (group.parentGroupId && excludedIds.has(group.parentGroupId) && !excludedIds.has(group.id)) {
-        excludedIds.add(group.id);
-        changed = true;
-      }
-    }
-  }
-
-  return excludedIds;
+  return getGroupSubtreeIds(groups, [BANK_ACCOUNTS_GROUP_NAME]);
 }

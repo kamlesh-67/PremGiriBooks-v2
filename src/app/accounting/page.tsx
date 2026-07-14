@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BookText, Landmark, ListTree } from "lucide-react";
+import { BookText, Landmark, ListTree, Receipt } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +25,12 @@ const ACCOUNTING_MODULES = [
     icon: Landmark,
     title: "Bank Management",
     description: "Manage your company's bank accounts.",
+  },
+  {
+    href: "/accounting/expense-heads",
+    icon: Receipt,
+    title: "Expense Heads",
+    description: "Manage operating expense ledgers under Direct and Indirect Expenses.",
   },
 ] as const;
 
