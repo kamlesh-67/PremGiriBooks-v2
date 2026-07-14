@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@/lib/app-error";
 import { runLedgerAction } from "@/modules/ledgers/actions/run-ledger-action";
 
-const { revalidatePathMock, warnMock } = vi.hoisted(() => ({
+const { revalidatePathMock, warnMock, errorMock } = vi.hoisted(() => ({
   revalidatePathMock: vi.fn(),
   warnMock: vi.fn(),
+  errorMock: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({
@@ -13,7 +14,7 @@ vi.mock("next/cache", () => ({
 }));
 
 vi.mock("@/lib/logger", () => ({
-  logger: { warn: warnMock, error: vi.fn() },
+  logger: { warn: warnMock, error: errorMock },
 }));
 
 describe("runLedgerAction", () => {
@@ -34,6 +35,21 @@ describe("runLedgerAction", () => {
     }, ["/a"]);
 
     expect(result).toEqual({ success: false, error: "Ledger not found." });
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
+  it("replaces a generic operation error with the generic message and logs it server-side", async () => {
+    const thrown = new Error("connect ECONNREFUSED 127.0.0.1:5432");
+
+    const result = await runLedgerAction(async () => {
+      throw thrown;
+    }, ["/a"]);
+
+    // toActionErrorMessage runs unmocked here: a non-AppError/non-ZodError
+    // must never surface its own message to the client — only the generic
+    // fallback, with the real error logged via Pino.
+    expect(result).toEqual({ success: false, error: "Something went wrong. Please try again." });
+    expect(errorMock).toHaveBeenCalledWith({ err: thrown }, "Unhandled Server Action error");
     expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 

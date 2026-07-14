@@ -94,3 +94,30 @@ and continues revalidating the remaining paths. `next/cache` and `@/lib/logger` 
 
 `npx vitest run` 23/23 passing (20 prior + 3 new), `npx tsc --noEmit` clean,
 `npx eslint src prisma` clean, `next build` succeeds.
+
+---
+
+## Round 3 (same day) — test-coverage nitpick on the Round 2 suite
+
+### Finding 4 — no test for a generic (non-AppError/non-ZodError) operation throw — VERIFIED VALID, FIXED
+
+**Claim:** `run-ledger-action.test.ts` covers an `AppError` throw and a revalidation throw, but not
+the third failure shape: a generic error from `operation()`, which should surface only the generic
+message and be logged via `logger.error`.
+
+**Verified:** true — the suite mocked `logger.error` anonymously (never asserted on) and had no
+generic-throw case, even though `toActionErrorMessage` runs unmocked in this suite, so that path is
+real, reachable behavior worth pinning (it is the layer that keeps raw internal error text — e.g. a
+Prisma connection error — from ever reaching the client).
+
+**Fix:** the `logger.error` mock is now captured (`errorMock`), and one test was added: a thrown
+plain `Error("connect ECONNREFUSED ...")` yields
+`{ success: false, error: "Something went wrong. Please try again." }`, `logger.error` is called
+with `({ err: thrown }, "Unhandled Server Action error")`, and no path is revalidated. Existing
+AppError and revalidation-failure tests unchanged, per the finding.
+
+### Round 3 validation
+
+`npx vitest run` 24/24 passing, `npx tsc --noEmit` clean, `npx eslint src prisma` clean.
+(No production code changed this round — test-only — so `next build` was not re-run; the last
+build on this exact production code already passed in Round 2.)
