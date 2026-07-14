@@ -1,8 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
-import { toActionErrorMessage } from "@/lib/action-error";
+import { runLedgerAction } from "@/modules/ledgers/actions/run-ledger-action";
 import { ledgerService } from "@/modules/ledgers/services/ledger-service";
 import type { CreateLedgerInput, UpdateLedgerInput } from "@/modules/ledgers/validation/ledger-schema";
 import type { ActionResult } from "@/types/api";
@@ -14,53 +12,31 @@ import type { Ledger } from "@/types/ledger";
 // ledgerService.createExpenseHead); Edit/Activate/Deactivate delegate to the
 // identical generic service methods and exist here only so the Expense Heads
 // screens revalidate their own routes instead of /accounting/ledgers.
+// /accounting/ledgers is also revalidated throughout, since every expense
+// head equally appears in the generic Ledger list.
+
+const LIST_PATHS = ["/accounting/expense-heads", "/accounting/ledgers"] as const;
 
 export async function createExpenseHeadAction(
   input: CreateLedgerInput
 ): Promise<ActionResult<Ledger>> {
-  try {
-    const ledger = await ledgerService.createExpenseHead(input);
-    revalidatePath("/accounting/expense-heads");
-    revalidatePath("/accounting/ledgers");
-    return { success: true, data: ledger };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
+  return runLedgerAction(() => ledgerService.createExpenseHead(input), LIST_PATHS);
 }
 
 export async function updateExpenseHeadAction(
   id: string,
   input: UpdateLedgerInput
 ): Promise<ActionResult<Ledger>> {
-  try {
-    const ledger = await ledgerService.updateLedger(id, input);
-    revalidatePath("/accounting/expense-heads");
-    revalidatePath(`/accounting/expense-heads/${id}/edit`);
-    revalidatePath("/accounting/ledgers");
-    return { success: true, data: ledger };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
+  return runLedgerAction(() => ledgerService.updateLedger(id, input), [
+    ...LIST_PATHS,
+    `/accounting/expense-heads/${id}/edit`,
+  ]);
 }
 
 export async function activateExpenseHeadAction(id: string): Promise<ActionResult<Ledger>> {
-  try {
-    const ledger = await ledgerService.activateLedger(id);
-    revalidatePath("/accounting/expense-heads");
-    revalidatePath("/accounting/ledgers");
-    return { success: true, data: ledger };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
+  return runLedgerAction(() => ledgerService.activateLedger(id), LIST_PATHS);
 }
 
 export async function deactivateExpenseHeadAction(id: string): Promise<ActionResult<Ledger>> {
-  try {
-    const ledger = await ledgerService.deactivateLedger(id);
-    revalidatePath("/accounting/expense-heads");
-    revalidatePath("/accounting/ledgers");
-    return { success: true, data: ledger };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
+  return runLedgerAction(() => ledgerService.deactivateLedger(id), LIST_PATHS);
 }

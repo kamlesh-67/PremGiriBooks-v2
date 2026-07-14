@@ -1,53 +1,31 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-
-import { toActionErrorMessage } from "@/lib/action-error";
+import { runLedgerAction } from "@/modules/ledgers/actions/run-ledger-action";
 import { ledgerService } from "@/modules/ledgers/services/ledger-service";
 import type { CreateLedgerInput, UpdateLedgerInput } from "@/modules/ledgers/validation/ledger-schema";
 import type { ActionResult } from "@/types/api";
 import type { Ledger } from "@/types/ledger";
 
+const LIST_PATH = "/accounting/ledgers";
+
 export async function createLedgerAction(input: CreateLedgerInput): Promise<ActionResult<Ledger>> {
-  try {
-    const ledger = await ledgerService.createLedger(input);
-    revalidatePath("/accounting/ledgers");
-    return { success: true, data: ledger };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
+  return runLedgerAction(() => ledgerService.createLedger(input), [LIST_PATH]);
 }
 
 export async function updateLedgerAction(
   id: string,
   input: UpdateLedgerInput
 ): Promise<ActionResult<Ledger>> {
-  try {
-    const ledger = await ledgerService.updateLedger(id, input);
-    revalidatePath("/accounting/ledgers");
-    revalidatePath(`/accounting/ledgers/${id}/edit`);
-    return { success: true, data: ledger };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
+  return runLedgerAction(() => ledgerService.updateLedger(id, input), [
+    LIST_PATH,
+    `/accounting/ledgers/${id}/edit`,
+  ]);
 }
 
 export async function activateLedgerAction(id: string): Promise<ActionResult<Ledger>> {
-  try {
-    const ledger = await ledgerService.activateLedger(id);
-    revalidatePath("/accounting/ledgers");
-    return { success: true, data: ledger };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
+  return runLedgerAction(() => ledgerService.activateLedger(id), [LIST_PATH]);
 }
 
 export async function deactivateLedgerAction(id: string): Promise<ActionResult<Ledger>> {
-  try {
-    const ledger = await ledgerService.deactivateLedger(id);
-    revalidatePath("/accounting/ledgers");
-    return { success: true, data: ledger };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
+  return runLedgerAction(() => ledgerService.deactivateLedger(id), [LIST_PATH]);
 }
