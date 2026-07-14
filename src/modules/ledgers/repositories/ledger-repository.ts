@@ -2,6 +2,7 @@ import { Prisma, type Ledger as PrismaLedger, type LedgerGroup } from "@prisma/c
 
 import { AppError } from "@/lib/app-error";
 import { prisma } from "@/lib/prisma";
+import { runInTransaction } from "@/lib/transaction";
 import { CASH_IN_HAND_GROUP_NAME } from "@/modules/ledger-groups/constants/default-groups";
 import { isRecordNotFoundError } from "@/modules/ledgers/utils/prisma-errors";
 import type {
@@ -38,7 +39,10 @@ function toLedger(raw: PrismaLedger): Ledger {
   return { ...raw, openingBalance: raw.openingBalance.toNumber() };
 }
 
-function toLedgerWithGroup(raw: PrismaLedger & { ledgerGroup: LedgerGroup }): LedgerWithGroup {
+// Exported for reuse by 15-bank-management.md's bank-account-repository.ts,
+// which needs the identical Decimal-to-number normalization for the Ledger
+// nested inside a BankAccount's `include`.
+export function toLedgerWithGroup(raw: PrismaLedger & { ledgerGroup: LedgerGroup }): LedgerWithGroup {
   return { ...raw, openingBalance: raw.openingBalance.toNumber() };
 }
 
@@ -99,8 +103,20 @@ export const ledgerRepository = {
   // exists (mirrors ledger-group-repository.ts's update()). A same-name
   // resubmit of a system-defined ledger still succeeds; only an actual
   // rename attempt is rejected.
-  async update(id: string, companyId: string, data: LedgerUpdateData): Promise<Ledger | null> {
-    return prisma.$transaction(async (tx) => {
+  //
+  // Accepts an optional external transaction client, mirroring create()'s
+  // identical parameter — 15-bank-management.md's bank-account-service.ts
+  // calls this from inside its own prisma.$transaction so a Bank Account's
+  // combined Ledger+BankAccount edit commits or rolls back as one atomic
+  // unit. Defaults to opening its own transaction for every other
+  // (non-transactional) caller, unchanged from before.
+  async update(
+    id: string,
+    companyId: string,
+    data: LedgerUpdateData,
+    client?: Prisma.TransactionClient
+  ): Promise<Ledger | null> {
+    const run = async (tx: Prisma.TransactionClient) => {
       const existing = await tx.ledger.findUnique({ where: { id } });
       if (!existing || existing.companyId !== companyId) {
         return null;
@@ -118,11 +134,13 @@ export const ledgerRepository = {
         }
         throw error;
       }
-    });
+    };
+
+    return client ? run(client) : runInTransaction(run);
   },
 
   async activate(id: string, companyId: string): Promise<ActivateLedgerResult> {
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const existing = await tx.ledger.findUnique({ where: { id } });
       if (!existing || existing.companyId !== companyId) {
         return { status: "not_found" };
@@ -137,7 +155,7 @@ export const ledgerRepository = {
   // way a LedgerGroup does — so no Serializable isolation/retry is needed,
   // unlike ledger-group-repository.ts's deactivate().
   async deactivate(id: string, companyId: string): Promise<DeactivateLedgerResult> {
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const existing = await tx.ledger.findUnique({ where: { id } });
       if (!existing || existing.companyId !== companyId) {
         return { status: "not_found" };

@@ -1,8 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { getCurrentUser, isCurrentUserAdmin } from "@/lib/current-user";
-import { hasPermission } from "@/lib/permissions";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { hasPermission, isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { ledgerGroupService } from "@/modules/ledger-groups/services/ledger-group-service";
 import { LedgerGroupEditForm } from "@/modules/ledger-groups/components/ledger-group-edit-form";
 
@@ -13,7 +13,7 @@ interface EditLedgerGroupPageProps {
 export default async function EditLedgerGroupPage({ params }: EditLedgerGroupPageProps) {
   const { id } = await params;
 
-  const user = await getCurrentUser();
+  const user = await getCurrentCompanyUser();
   const canEdit = await hasPermission(user, "accounting", "edit");
   if (!canEdit) {
     redirect("/accounting/ledger-groups");
@@ -27,7 +27,7 @@ export default async function EditLedgerGroupPage({ params }: EditLedgerGroupPag
   const parent = ledgerGroup.parentGroupId
     ? await ledgerGroupService.getLedgerGroup(ledgerGroup.parentGroupId)
     : null;
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
 
   return (
     <AppShell isAdmin={isAdmin}>

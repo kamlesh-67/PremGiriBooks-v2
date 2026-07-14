@@ -10,6 +10,6 @@ export function toUserFormValues(user: UserWithRole): Partial<UserFormInput> {
     // passwordHash is never exposed to the UI — a blank password field means
     // "leave the current password unchanged" (enforced by updateUserSchema).
     password: "",
-    roleId: user.roleId,
+    roleId: user.role.id,
   };
 }

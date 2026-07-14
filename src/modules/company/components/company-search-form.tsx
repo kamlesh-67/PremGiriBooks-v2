@@ -18,9 +18,14 @@ import type { CompanyStatusFilter } from "@/types/company";
 interface CompanySearchFormProps {
   initialSearch: string;
   initialStatus: CompanyStatusFilter;
+  basePath?: string;
 }
 
-export function CompanySearchForm({ initialSearch, initialStatus }: CompanySearchFormProps) {
+export function CompanySearchForm({
+  initialSearch,
+  initialStatus,
+  basePath = "/company",
+}: CompanySearchFormProps) {
   const router = useRouter();
   const [search, setSearch] = React.useState(initialSearch);
   const [status, setStatus] = React.useState<CompanyStatusFilter>(initialStatus);
@@ -35,7 +40,7 @@ export function CompanySearchForm({ initialSearch, initialStatus }: CompanySearc
     }
 
     const query = params.toString();
-    router.push(query ? `/company?${query}` : "/company");
+    router.push(query ? `${basePath}?${query}` : basePath);
   }
 
   return (

@@ -92,6 +92,15 @@ Seed a default permission set for each of the six roles from `07-authentication.
 - Administrator — every module, every action.
 - Accountant, Sales, Purchase, Store Manager, Employee — a reasonable starting subset scoped to their name (e.g. Sales gets `sales`/`reports` view+create, not `accounting`/`gst`). These are forward-declarative seed values; the modules themselves don't exist yet, so there is nothing to verify these against beyond the seed data being sensible and editable.
 
+> **Amended 2026-07-13**: `Role` gained a required `companyId` (every
+> company now holds a private copy of these 6 roles, seeded by
+> `TenantBootstrapService`, not one shared global set) plus
+> `isSystemDefined`/`isProtected` flags. A `"roles"` module was added to
+> the Permission catalog itself, so Role & Permission Management gates on
+> a real permission instead of a role-name check. "Administrator" is
+> renamed "Company Admin."
+> (`architecture-Migration-Super-Admin-Administration.md`.)
+
 ---
 
 # Business Rules
@@ -100,6 +109,19 @@ Seed a default permission set for each of the six roles from `07-authentication.
 - The last active Administrator-capable role in the system cannot be deactivated — at least one active role with full Administrator access must always exist, mirroring `10-user-management.md`'s "last active Administrator user" rule at the role level.
 - Only Administrator users may Create, Edit, Deactivate roles or reassign permissions.
 - Permission checks default to **deny** — a role with no matching `RolePermission` row for a `(module, action)` pair has no access to it.
+
+> **Amended 2026-07-13**: "a role's name must be unique" is now scoped
+> `@@unique([companyId, name])`, not globally unique. "Last active
+> Administrator-capable role" is now the name-independent "last active
+> full-catalog-coverage role," scoped **per company**
+> (`src/modules/roles/utils/role-coverage.ts`) — the previous global check
+> would have let one company's roles affect another's deactivation
+> guard, a cross-tenant leak this migration closes. "Only Administrator
+> users" is now `assertPermission(user, "roles", action)` after
+> `getCurrentCompanyUser()`, not a role-name check. New rule: an
+> `isProtected` role (the 6 reserved defaults) can never be renamed,
+> deactivated, or have its mandatory permission set reduced — only
+> extended.
 
 ---
 
@@ -117,6 +139,13 @@ Responsibilities
 - `assertPermission(user, module, action): Promise<void>` (throws `AuthorizationError` on failure, mirroring `assertAdministrator()`)
 
 This sits alongside, not instead of, `src/lib/current-user.ts`'s existing `assertAdministrator()`. Do not retrofit `assertAdministrator()` call sites in the Company, Financial Year, or User modules during this task — that is an unnecessary rewrite of working, tested code (`code-standards.md`: "Fix root causes instead of applying temporary workarounds" cuts the other way here — there is no bug to fix, only a new capability to add). Every module built **after** this task should call `assertPermission()` instead of hardcoding `assertAdministrator()`.
+
+> **Amended 2026-07-13**: `assertAdministrator()` no longer exists —
+> replaced by `assertSuperAdmin()` (Platform-only) and real
+> `assertPermission()` calls everywhere else, including the Company/
+> Financial Year/User modules this section originally exempted from
+> retrofitting. `hasPermission`/`assertPermission` now also filter by
+> `companyId`, since `Role.name` is only unique per company.
 
 ---
 

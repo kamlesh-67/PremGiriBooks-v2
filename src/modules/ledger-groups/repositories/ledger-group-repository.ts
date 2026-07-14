@@ -2,16 +2,20 @@ import { Prisma, type LedgerGroup } from "@prisma/client";
 
 import { AppError } from "@/lib/app-error";
 import { prisma } from "@/lib/prisma";
+import { runInTransaction } from "@/lib/transaction";
 import { DEFAULT_LEDGER_GROUPS } from "@/modules/ledger-groups/constants/default-groups";
-import { isRecordNotFoundError } from "@/modules/ledger-groups/utils/prisma-errors";
-import { withRetry } from "@/modules/ledger-groups/utils/with-retry";
+import { isRecordNotFoundError, isRetryableTransactionError } from "@/modules/ledger-groups/utils/prisma-errors";
 import type {
   ActivateLedgerGroupResult,
   DeactivateLedgerGroupResult,
   LedgerGroupListFilters,
 } from "@/types/ledger-group";
 
-const SERIALIZABLE = { isolationLevel: Prisma.TransactionIsolationLevel.Serializable };
+const SERIALIZABLE_RETRY = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  retryable: isRetryableTransactionError,
+  conflictMessage: "This ledger group was changed by another request. Please try again.",
+};
 
 export interface LedgerGroupCreateData {
   name: string;
@@ -78,7 +82,7 @@ export const ledgerGroupRepository = {
   // plain Read Committed is sufficient; unlike deactivate() below, no
   // Serializable/retry is needed.
   async update(id: string, companyId: string, data: LedgerGroupUpdateData): Promise<LedgerGroup | null> {
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const existing = await tx.ledgerGroup.findUnique({ where: { id } });
       if (!existing || existing.companyId !== companyId) {
         return null;
@@ -101,9 +105,15 @@ export const ledgerGroupRepository = {
   // Also checks the parent (if any) is active in the same transaction —
   // reactivating a child under a still-inactive parent would reach exactly
   // the "active child under an inactive parent" state deactivate()'s own
-  // "no active children" invariant exists to prevent.
+  // "no active children" invariant exists to prevent. Same
+  // Serializable + retry protection as deactivate() below, for the mirror
+  // image of its race: without it, a concurrent deactivate() of this same
+  // parent could pass its own "no active children" check (this child not
+  // yet active) and commit its parent-inactive write around the same time
+  // this activate's read of the parent's isActive status, letting an active
+  // child end up under an inactive parent after all.
   async activate(id: string, companyId: string): Promise<ActivateLedgerGroupResult> {
-    return prisma.$transaction(async (tx) => {
+    return runInTransaction(async (tx) => {
       const existing = await tx.ledgerGroup.findUnique({ where: { id } });
       if (!existing || existing.companyId !== companyId) {
         return { status: "not_found" };
@@ -118,7 +128,7 @@ export const ledgerGroupRepository = {
 
       const ledgerGroup = await tx.ledgerGroup.update({ where: { id }, data: { isActive: true } });
       return { status: "ok", ledgerGroup };
-    });
+    }, SERIALIZABLE_RETRY);
   },
 
   /**
@@ -131,31 +141,29 @@ export const ledgerGroupRepository = {
    * past this count check.
    */
   deactivate(id: string, companyId: string): Promise<DeactivateLedgerGroupResult> {
-    return withRetry(() =>
-      prisma.$transaction(async (tx) => {
-        const existing = await tx.ledgerGroup.findUnique({ where: { id } });
-        if (!existing || existing.companyId !== companyId) {
-          return { status: "not_found" };
-        }
-        if (existing.isSystemDefined) {
-          return { status: "system_defined" };
-        }
+    return runInTransaction(async (tx) => {
+      const existing = await tx.ledgerGroup.findUnique({ where: { id } });
+      if (!existing || existing.companyId !== companyId) {
+        return { status: "not_found" };
+      }
+      if (existing.isSystemDefined) {
+        return { status: "system_defined" };
+      }
 
-        const activeChildren = await tx.ledgerGroup.count({
-          where: { parentGroupId: id, isActive: true },
-        });
-        if (activeChildren > 0) {
-          return { status: "has_active_children" };
-        }
+      const activeChildren = await tx.ledgerGroup.count({
+        where: { parentGroupId: id, isActive: true },
+      });
+      if (activeChildren > 0) {
+        return { status: "has_active_children" };
+      }
 
-        const ledgerGroup = await tx.ledgerGroup.update({
-          where: { id },
-          data: { isActive: false },
-        });
+      const ledgerGroup = await tx.ledgerGroup.update({
+        where: { id },
+        data: { isActive: false },
+      });
 
-        return { status: "ok", ledgerGroup };
-      }, SERIALIZABLE)
-    );
+      return { status: "ok", ledgerGroup };
+    }, SERIALIZABLE_RETRY);
   },
 
   /**

@@ -1,8 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { getCurrentUser, isCurrentUserAdmin } from "@/lib/current-user";
-import { hasPermission } from "@/lib/permissions";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { hasPermission, isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { ledgerService } from "@/modules/ledgers/services/ledger-service";
 import { LedgerEditForm } from "@/modules/ledgers/components/ledger-edit-form";
 
@@ -13,7 +13,7 @@ interface EditLedgerPageProps {
 export default async function EditLedgerPage({ params }: EditLedgerPageProps) {
   const { id } = await params;
 
-  const user = await getCurrentUser();
+  const user = await getCurrentCompanyUser();
   const canEdit = await hasPermission(user, "accounting", "edit");
   if (!canEdit) {
     redirect("/accounting/ledgers");
@@ -24,7 +24,7 @@ export default async function EditLedgerPage({ params }: EditLedgerPageProps) {
     notFound();
   }
 
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
 
   return (
     <AppShell isAdmin={isAdmin}>

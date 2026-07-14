@@ -30,12 +30,16 @@ export type CompanyPersistData = Omit<CompanyInput, NullableField> &
  * multiple NULLs in the unique `gstin` column but would reject duplicate
  * empty strings.
  */
+/** Blank-to-null rule shared by every nullable field below and by callers normalizing a single field. */
+export function blankToNull(value: string | undefined): string | null {
+  return value === "" || value === undefined ? null : value;
+}
+
 export function normalizeCompanyInput(input: CompanyInput): CompanyPersistData {
   const normalized: Record<string, unknown> = { ...input };
 
   for (const field of NULLABLE_FIELDS) {
-    const value = normalized[field];
-    normalized[field] = value === "" || value === undefined ? null : value;
+    normalized[field] = blankToNull(normalized[field] as string | undefined);
   }
 
   return normalized as CompanyPersistData;

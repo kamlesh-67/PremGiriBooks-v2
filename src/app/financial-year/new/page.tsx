@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { getCurrentCompany } from "@/lib/current-company";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { FinancialYearForm } from "@/modules/financial-year/components/financial-year-form";
 import { createFinancialYearAction } from "@/modules/financial-year/actions/financial-year-actions";
 
@@ -12,7 +12,7 @@ export default async function NewFinancialYearPage() {
     redirect("/company/select");
   }
 
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
   if (!isAdmin) {
     redirect("/financial-year");
   }

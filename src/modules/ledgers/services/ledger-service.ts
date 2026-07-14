@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { AppError } from "@/lib/app-error";
-import { getCurrentUser } from "@/lib/current-user";
+import { getCurrentCompanyUser } from "@/lib/current-user";
 import { assertPermission } from "@/lib/permissions";
 import { ledgerGroupRepository } from "@/modules/ledger-groups/repositories/ledger-group-repository";
 import { ledgerRepository } from "@/modules/ledgers/repositories/ledger-repository";
@@ -31,7 +31,7 @@ function translatePersistError(error: unknown): never {
 
 export const ledgerService = {
   async listLedgers(filters: LedgerListFilters = {}): Promise<LedgerWithGroup[]> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "view");
     return ledgerRepository.findMany(user.companyId, filters);
   },
@@ -40,7 +40,7 @@ export const ledgerService = {
   // "not found" — never distinguish "exists but isn't yours" from "doesn't
   // exist," mirroring ledger-group-service.ts's identical rule.
   async getLedger(id: string): Promise<LedgerWithGroup | null> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "view");
 
     const ledger = await ledgerRepository.findById(id);
@@ -54,14 +54,14 @@ export const ledgerService = {
   async listSelectableLedgers(
     filters: Omit<LedgerListFilters, "status"> = {}
   ): Promise<LedgerWithGroup[]> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "view");
     return ledgerRepository.findMany(user.companyId, { ...filters, status: "active" });
   },
 
   /** Active, non-"Bank Accounts" groups for the generic Create Ledger screen's Group selector. */
   async listSelectableLedgerGroupsForLedger(): Promise<LedgerGroup[]> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "view");
 
     const groups = await ledgerGroupRepository.findMany(user.companyId, { status: "active" });
@@ -70,7 +70,7 @@ export const ledgerService = {
   },
 
   async createLedger(input: CreateLedgerInput): Promise<Ledger> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "create");
 
     const data = createLedgerSchema.parse(input);
@@ -106,7 +106,7 @@ export const ledgerService = {
   },
 
   async updateLedger(id: string, input: UpdateLedgerInput): Promise<Ledger> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "edit");
 
     const data = updateLedgerSchema.parse(input);
@@ -131,7 +131,7 @@ export const ledgerService = {
   },
 
   async activateLedger(id: string): Promise<Ledger> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", LIFECYCLE_ACTION);
 
     const result = await ledgerRepository.activate(id, user.companyId);
@@ -144,7 +144,7 @@ export const ledgerService = {
   },
 
   async deactivateLedger(id: string): Promise<Ledger> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", LIFECYCLE_ACTION);
 
     const result = await ledgerRepository.deactivate(id, user.companyId);

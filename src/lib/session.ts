@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type UserType } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
@@ -22,9 +22,11 @@ export interface SessionUser {
   id: string;
   username: string;
   fullName: string;
-  companyId: string;
+  userType: UserType;
+  companyId: string | null;
   isActive: boolean;
-  role: { name: string };
+  // null for a PLATFORM user, which has no Role.
+  role: { name: string } | null;
 }
 
 export interface SessionRecord {
@@ -55,6 +57,7 @@ export async function createSession(
 }
 
 export async function getSessionWithUser(token: string): Promise<SessionWithUser | null> {
+  // user.role is null for a PLATFORM user, since roleId is nullable.
   const session = await prisma.session.findUnique({
     where: { id: token },
     include: { user: { include: { role: true } } },
@@ -83,9 +86,10 @@ export async function getSessionWithUser(token: string): Promise<SessionWithUser
       id: session.user.id,
       username: session.user.username,
       fullName: session.user.fullName,
+      userType: session.user.userType,
       companyId: session.user.companyId,
       isActive: session.user.isActive,
-      role: { name: session.user.role.name },
+      role: session.user.role ? { name: session.user.role.name } : null,
     },
   };
 }

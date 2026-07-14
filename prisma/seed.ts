@@ -4,13 +4,22 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { hashPassword } from "../src/lib/password";
 import { prisma as sharedPrisma } from "../src/lib/prisma";
 import { permissionService } from "../src/modules/roles/services/permission-service";
-import { DEFAULT_ROLE_NAMES } from "../src/constants/roles";
+import { tenantBootstrapService } from "../src/modules/administration/services/tenant-bootstrap-service";
 
-// 07-authentication.md explicitly excludes a registration screen, so the very
-// first Administrator must be bootstrapped here. This default password is a
-// local-development convenience only — production-like environments must set
-// SEED_ADMIN_PASSWORD explicitly (enforced below) rather than relying on it.
+// 07-authentication.md explicitly excludes a registration screen, so the
+// very first Super Admin and the first company's Company Admin must be
+// bootstrapped here. These default passwords are a local-development
+// convenience only — production-like environments must set
+// SEED_SUPER_ADMIN_PASSWORD/SEED_ADMIN_PASSWORD explicitly (enforced below)
+// rather than relying on them.
+const DEFAULT_SEED_SUPER_ADMIN_PASSWORD = "SuperAdmin@12345";
 const DEFAULT_SEED_ADMIN_PASSWORD = "Admin@12345";
+
+const DEFAULT_FINANCIAL_YEAR = {
+  name: "2026-2027",
+  startDate: "2026-04-01",
+  endDate: "2027-03-31",
+};
 
 async function main(): Promise<void> {
   const databaseUrl = process.env["DATABASE_URL"];
@@ -18,46 +27,78 @@ async function main(): Promise<void> {
     throw new Error("DATABASE_URL is not set");
   }
 
+  const isProduction = process.env["NODE_ENV"] === "production";
+  const seedSuperAdminPassword = process.env["SEED_SUPER_ADMIN_PASSWORD"];
   const seedAdminPassword = process.env["SEED_ADMIN_PASSWORD"];
   const adapter = new PrismaPg(databaseUrl);
   const prisma = new PrismaClient({ adapter });
 
   try {
-    for (const name of DEFAULT_ROLE_NAMES) {
-      await prisma.role.upsert({ where: { name }, update: {}, create: { name } });
-    }
-    console.log(`Seed: ensured ${DEFAULT_ROLE_NAMES.length} default roles.`);
+    // The Permission catalog (module x action capability definitions) is
+    // global, not per-company — Role/RolePermission are the per-company
+    // parts, seeded per company by tenantBootstrapService.bootstrapTenant
+    // below, not here.
+    await permissionService.ensureCatalog();
+    console.log("Seed: ensured the permission catalog.");
 
-    // Runs unconditionally (not skipped by the admin-already-exists early
-    // return below) — additive/idempotent, per 11-role-permissions.md, so
-    // re-running it on an existing install safely picks up any new catalog
-    // entries or restores a default role's baseline permissions without ever
-    // stripping an Administrator's later customization. Uses the app's own
-    // Prisma singleton (src/lib/prisma.ts), not this script's local client —
-    // disconnected separately in the finally block below.
-    await permissionService.seedDefaults();
-    console.log("Seed: ensured the permission catalog and default role permissions.");
+    // Idempotent — a fresh install has no PLATFORM user yet; re-running
+    // this script against an already-bootstrapped install must not create
+    // a second one.
+    const existingSuperAdmin = await prisma.user.findFirst({ where: { userType: "PLATFORM" } });
+    if (!existingSuperAdmin) {
+      if (isProduction && !seedSuperAdminPassword) {
+        throw new Error(
+          "SEED_SUPER_ADMIN_PASSWORD must be set before bootstrapping the Super Admin user in a production environment — refusing to fall back to a default password."
+        );
+      }
+
+      const superAdminPasswordHash = await hashPassword(
+        seedSuperAdminPassword ?? DEFAULT_SEED_SUPER_ADMIN_PASSWORD
+      );
+      await prisma.user.create({
+        data: {
+          username: "superadmin",
+          fullName: "Super Admin",
+          email: "superadmin@premgiribooks.local",
+          passwordHash: superAdminPasswordHash,
+          userType: "PLATFORM",
+          companyId: null,
+          roleId: null,
+        },
+      });
+
+      console.log('Seed: created bootstrap Super Admin user "superadmin".');
+      console.log(
+        seedSuperAdminPassword
+          ? 'Seed: sign in with username "superadmin" using the password set via SEED_SUPER_ADMIN_PASSWORD.'
+          : 'Seed: sign in with username "superadmin" using the local-development default password documented in prisma/seed.ts. Set SEED_SUPER_ADMIN_PASSWORD to override it.'
+      );
+    } else {
+      console.log('Seed: a PLATFORM user already exists — skipping Super Admin bootstrap.');
+    }
 
     const existingAdmin = await prisma.user.findUnique({ where: { username: "admin" } });
     if (existingAdmin) {
-      console.log('Seed: user "admin" already exists — skipping bootstrap user/company creation.');
+      console.log('Seed: user "admin" already exists — skipping bootstrap company creation.');
       return;
     }
 
-    if (process.env["NODE_ENV"] === "production" && !seedAdminPassword) {
+    if (isProduction && !seedAdminPassword) {
       throw new Error(
         "SEED_ADMIN_PASSWORD must be set before bootstrapping the admin user in a production environment — refusing to fall back to a default password."
       );
     }
 
-    const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: "Administrator" } });
     const passwordHash = await hashPassword(seedAdminPassword ?? DEFAULT_SEED_ADMIN_PASSWORD);
 
-    // Wrapped in a transaction so a failure partway through (e.g. the user
-    // insert failing after the company insert succeeds) can't leave an
-    // orphaned company with no admin user — and can't cause a duplicate
-    // "Default Company" to be created if the seed script is re-run after
-    // such a partial failure.
+    // Wrapped in a transaction so a failure partway through can't leave an
+    // orphaned company with no Company Admin — and can't cause a duplicate
+    // "Default Company" if the seed script is re-run after such a partial
+    // failure. Mirrors companyService.createCompany()'s exact workflow
+    // (Company -> TenantBootstrapService -> Company Admin User), just
+    // without that method's assertSuperAdmin() gate, since this script has
+    // no request/session context to gate against — the same reasoning this
+    // codebase has always used for seed.ts bypassing service-level auth.
     await prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
         data: {
@@ -67,19 +108,26 @@ async function main(): Promise<void> {
         },
       });
 
+      const { companyAdminRoleId } = await tenantBootstrapService.bootstrapTenant(
+        company.id,
+        { financialYear: DEFAULT_FINANCIAL_YEAR },
+        tx
+      );
+
       await tx.user.create({
         data: {
           username: "admin",
-          fullName: "Administrator",
+          fullName: "Company Admin",
           email: "admin@premgiribooks.local",
           passwordHash,
+          userType: "COMPANY",
           companyId: company.id,
-          roleId: adminRole.id,
+          roleId: companyAdminRoleId,
         },
       });
     });
 
-    console.log('Seed: created bootstrap Administrator user "admin" and "Default Company".');
+    console.log('Seed: created bootstrap Company Admin user "admin" and "Default Company".');
     console.log(
       seedAdminPassword
         ? 'Seed: sign in with username "admin" using the password set via SEED_ADMIN_PASSWORD.'

@@ -4,13 +4,13 @@ import { Plus } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
-import { getCurrentUser, isCurrentUserAdmin } from "@/lib/current-user";
-import { hasPermission } from "@/lib/permissions";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { hasPermission, isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { ledgerGroupService } from "@/modules/ledger-groups/services/ledger-group-service";
 import { LedgerGroupTree } from "@/modules/ledger-groups/components/ledger-group-tree";
 
 export default async function LedgerGroupListPage() {
-  const user = await getCurrentUser();
+  const user = await getCurrentCompanyUser();
   const canView = await hasPermission(user, "accounting", "view");
   if (!canView) {
     redirect("/");
@@ -18,7 +18,7 @@ export default async function LedgerGroupListPage() {
 
   const [tree, isAdmin, canCreate, canEdit, canManage] = await Promise.all([
     ledgerGroupService.listLedgerGroupTree(),
-    isCurrentUserAdmin(),
+    isCurrentUserCompanyAdmin(),
     hasPermission(user, "accounting", "create"),
     hasPermission(user, "accounting", "edit"),
     hasPermission(user, "accounting", "delete"),

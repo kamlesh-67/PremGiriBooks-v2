@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { FormSection } from "@/components/common/form-section";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,24 +24,11 @@ import { companySchema, type CompanyInput } from "@/modules/company/validation/c
 import type { ActionResult } from "@/types/api";
 import type { CompanyWithSettings } from "@/types/company";
 
-interface FormSectionProps {
-  title: string;
-  children: React.ReactNode;
-}
-
-function FormSection({ title, children }: FormSectionProps) {
-  return (
-    <div className="flex flex-col gap-4">
-      <h3 className="text-sm font-medium text-foreground">{title}</h3>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{children}</div>
-    </div>
-  );
-}
-
 interface CompanyFormProps {
   defaultValues?: Partial<CompanyInput>;
   onSubmit: (data: CompanyInput) => Promise<ActionResult<CompanyWithSettings>>;
   submitLabel: string;
+  redirectPath?: string;
 }
 
 const BASE_DEFAULT_VALUES: CompanyInput = {
@@ -52,7 +40,12 @@ const BASE_DEFAULT_VALUES: CompanyInput = {
   decimalPlaces: 2,
 };
 
-export function CompanyForm({ defaultValues, onSubmit, submitLabel }: CompanyFormProps) {
+export function CompanyForm({
+  defaultValues,
+  onSubmit,
+  submitLabel,
+  redirectPath = "/company",
+}: CompanyFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -70,7 +63,7 @@ export function CompanyForm({ defaultValues, onSubmit, submitLabel }: CompanyFor
 
     if (result.success) {
       toast.success("Company saved successfully.");
-      router.push("/company");
+      router.push(redirectPath);
       router.refresh();
       return;
     }
@@ -408,7 +401,7 @@ export function CompanyForm({ defaultValues, onSubmit, submitLabel }: CompanyFor
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/company")}
+            onClick={() => router.push(redirectPath)}
             disabled={isSubmitting}
           >
             Cancel

@@ -1,65 +1,57 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { hasPermission } from "@/lib/permissions";
 import { companyService } from "@/modules/company/services/company-service";
-import { CompanyEditForm } from "@/modules/company/components/company-edit-form";
-import { CompanySettingsForm } from "@/modules/company/components/company-settings-form";
-import { companySettingsSchema } from "@/modules/company/validation/company-schema";
+import { CompanyProfileForm } from "@/modules/company/components/company-profile-form";
 import { toCompanyFormValues } from "@/modules/company/utils/company-form-values";
 
 interface EditCompanyPageProps {
   params: Promise<{ id: string }>;
 }
 
+// Legal/registration-identifier editing (Legal Name, GSTIN, PAN, TAN, CIN,
+// currency code) stays Super-Admin-only at /administration/companies/[id]/edit
+// per the Company Module split — this page is Company Admin's own profile
+// screen (everything else, plus logo). Operational settings (theme/date
+// format/number format/currency display format) moved to /profile's
+// "Company Settings" tab.
 export default async function EditCompanyPage({ params }: EditCompanyPageProps) {
   const { id } = await params;
-  const company = await companyService.getCompany(id);
 
+  // getCompany() already scopes a COMPANY user to their own company (returns
+  // null otherwise), but that 404s rather than denies — assertPermission is
+  // this page's real access-control boundary, matching
+  // companyService.updateCompanyProfile's own gate.
+  const user = await getCurrentCompanyUser();
+  const canEdit = await hasPermission(user, "company", "edit");
+  if (!canEdit) {
+    redirect("/");
+  }
+
+  const company = await companyService.getCompany(id);
   if (!company) {
     notFound();
   }
 
-  const settingsParseResult = company.settings
-    ? companySettingsSchema.safeParse(company.settings)
-    : undefined;
-  const settingsDefaults = settingsParseResult?.success ? settingsParseResult.data : undefined;
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await hasPermission(user, "settings", "view");
 
   return (
     <AppShell isAdmin={isAdmin}>
       <div className="flex flex-col gap-6 p-6">
         <div>
           <h1 className="text-xl font-semibold text-foreground">
-            Edit Company — {company.companyName}
+            Company Profile — {company.companyName}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Update company profile and settings.
+            Update your company&apos;s profile. Registration identifiers (Legal Name, GSTIN, PAN,
+            TAN, CIN) and currency code are managed by Super Admin. Operational preferences (theme,
+            date format, etc.) are on your Profile page.
           </p>
         </div>
 
-        <Tabs defaultValue="profile">
-          <TabsList>
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
-          <TabsContent value="profile">
-            <CompanyEditForm
-              companyId={company.id}
-              defaultValues={toCompanyFormValues(company)}
-            />
-          </TabsContent>
-          <TabsContent value="settings">
-            {settingsDefaults ? (
-              <CompanySettingsForm companyId={company.id} defaultValues={settingsDefaults} />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Company settings are still initializing. Please try again shortly.
-              </p>
-            )}
-          </TabsContent>
-        </Tabs>
+        <CompanyProfileForm companyId={company.id} defaultValues={toCompanyFormValues(company)} />
       </div>
     </AppShell>
   );

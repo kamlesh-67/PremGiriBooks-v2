@@ -1,17 +1,33 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { AppError } from "@/lib/app-error";
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
 import { getSessionWithUser } from "@/lib/session";
 
-export interface CurrentUser {
+// A PLATFORM user (Super Admin) never belongs to a company or holds a Role;
+// a COMPANY user always has both. Modeled as a discriminated union (rather
+// than a single interface with optional fields) so every call site that
+// needs companyId/role is forced to narrow via getCurrentCompanyUser()
+// first, instead of reading a value that could silently be undefined.
+export interface PlatformCurrentUser {
   id: string;
   username: string;
   fullName: string;
+  userType: "PLATFORM";
+}
+
+export interface CompanyCurrentUser {
+  id: string;
+  username: string;
+  fullName: string;
+  userType: "COMPANY";
   role: string;
   companyId: string;
 }
+
+export type CurrentUser = PlatformCurrentUser | CompanyCurrentUser;
 
 const resolveCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const cookieStore = await cookies();
@@ -25,12 +41,35 @@ const resolveCurrentUser = cache(async (): Promise<CurrentUser | null> => {
     return null;
   }
 
+  const { user } = result;
+
+  if (user.userType === "PLATFORM") {
+    return {
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
+      userType: "PLATFORM",
+    };
+  }
+
+  // A COMPANY-type session row is only ever created for a user that already
+  // has companyId/roleId populated (userService.createUser and the
+  // TenantBootstrapService-driven Company Admin creation both guarantee
+  // this) — but the columns are nullable at the schema level to support
+  // PLATFORM users, so TypeScript still sees them as string | null here.
+  // Throwing on a genuinely null value surfaces a real data-integrity bug
+  // immediately instead of quietly returning a broken CompanyCurrentUser.
+  if (!user.role || !user.companyId) {
+    throw new AppError("A COMPANY user must have a role and a company assigned.");
+  }
+
   return {
-    id: result.user.id,
-    username: result.user.username,
-    fullName: result.user.fullName,
-    role: result.user.role.name,
-    companyId: result.user.companyId,
+    id: user.id,
+    username: user.username,
+    fullName: user.fullName,
+    userType: "COMPANY",
+    role: user.role.name,
+    companyId: user.companyId,
   };
 });
 
@@ -79,25 +118,70 @@ export async function resolveFailingClosed<T>(resolve: () => Promise<T>): Promis
   }
 }
 
-export async function getCurrentUserRole(): Promise<string> {
-  const user = await getCurrentUser();
-  return user.role;
-}
-
-export async function isCurrentUserAdmin(): Promise<boolean> {
-  return (await getCurrentUserRole()) === "Administrator";
-}
-
 export class AuthorizationError extends AppError {
-  constructor(message = "Only administrators can perform this action.") {
+  constructor(message = "You do not have permission to perform this action.") {
     super(message);
     this.name = "AuthorizationError";
   }
 }
 
-export async function assertAdministrator(): Promise<void> {
-  const role = await getCurrentUserRole();
-  if (role !== "Administrator") {
-    throw new AuthorizationError();
+/**
+ * Narrows CurrentUser to CompanyCurrentUser — the mechanism every
+ * company-scoped module (bank-accounts, ledgers, ledger-groups,
+ * financial-year, company-settings, users, roles, permissions, profile)
+ * uses instead of getCurrentUser(), so companyId/role stay guaranteed
+ * non-null without every call site re-checking userType itself. A PLATFORM
+ * user calling a company-scoped action is a genuine authorization failure,
+ * not a "not logged in" state.
+ */
+export async function getCurrentCompanyUser(): Promise<CompanyCurrentUser> {
+  const user = await getCurrentUser();
+  if (user.userType !== "COMPANY") {
+    throw new AuthorizationError("This action is only available to company users.");
   }
+  return user;
+}
+
+/**
+ * Super Admin is not a Role — per
+ * architecture-Migration-Super-Admin-Administration.md, it is determined
+ * purely by userType === PLATFORM. This is the only hardcoded identity
+ * check left in the app; every Company-side authorization decision goes
+ * through assertPermission() (src/lib/permissions.ts) instead.
+ */
+export async function isCurrentUserSuperAdmin(): Promise<boolean> {
+  const user = await getCurrentUser();
+  return user.userType === "PLATFORM";
+}
+
+export async function assertSuperAdmin(): Promise<void> {
+  if (!(await isCurrentUserSuperAdmin())) {
+    throw new AuthorizationError("Only Super Admin can perform this action.");
+  }
+}
+
+/**
+ * Page-level guard shared by every Super-Admin-only /administration page —
+ * redirects a non-Super-Admin to "/" instead of each page repeating the same
+ * isCurrentUserSuperAdmin() + redirect("/") pair. Use assertSuperAdmin()
+ * instead for Server Actions/services, where a thrown AuthorizationError
+ * (not a redirect) is the right failure mode.
+ */
+export async function requireSuperAdmin(): Promise<void> {
+  if (!(await isCurrentUserSuperAdmin())) {
+    redirect("/");
+  }
+}
+
+/**
+ * Narrows CurrentUser to PlatformCurrentUser — for the (rarer) case where a
+ * Super-Admin-only service method also needs the actor's id, e.g. for an
+ * AuditLog entry, not just a boolean gate.
+ */
+export async function getCurrentSuperAdmin(): Promise<PlatformCurrentUser> {
+  const user = await getCurrentUser();
+  if (user.userType !== "PLATFORM") {
+    throw new AuthorizationError("Only Super Admin can perform this action.");
+  }
+  return user;
 }

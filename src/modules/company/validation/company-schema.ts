@@ -47,6 +47,22 @@ export const companySchema = z.object({
 
 export type CompanyInput = z.infer<typeof companySchema>;
 
+// The subset of companySchema a Company Admin may edit for their own company
+// via /company/[id]/edit — everything except the compliance-sensitive
+// registration identifiers (legalName, gstin, pan, tan, cin) and the
+// currency ISO code, which stay Super-Admin-only
+// (/administration/companies/[id]/edit) per the Company Module split.
+export const companyProfileSchema = companySchema.omit({
+  legalName: true,
+  gstin: true,
+  pan: true,
+  tan: true,
+  cin: true,
+  currency: true,
+});
+
+export type CompanyProfileInput = z.infer<typeof companyProfileSchema>;
+
 export const companySettingsSchema = z.object({
   defaultTheme: z.enum(["light", "dark", "system"]),
   dateFormat: z.enum(["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]),

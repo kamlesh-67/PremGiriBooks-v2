@@ -1,9 +1,11 @@
-import type { Role } from "@prisma/client";
+import type { Prisma, Role } from "@prisma/client";
 
-import { DEFAULT_ROLE_NAMES } from "@/constants/roles";
+import { toActionErrorMessage } from "@/lib/action-error";
 import { AppError } from "@/lib/app-error";
-import { assertAdministrator } from "@/lib/current-user";
-import { logger } from "@/lib/logger";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { assertPermission } from "@/lib/permissions";
+import { COMPANY_ADMIN_ROLE_NAME } from "@/constants/roles";
+import { DEFAULT_ROLE_PERMISSIONS } from "@/constants/permissions";
 import { roleRepository } from "@/modules/roles/repositories/role-repository";
 import { isUniqueConstraintError } from "@/modules/roles/utils/prisma-errors";
 import { roleSchema, type RoleFormInput } from "@/modules/roles/validation/role-schema";
@@ -14,60 +16,65 @@ function translateRolePersistError(error: unknown): never {
     throw new AppError("A role with this name already exists.");
   }
 
-  // Never surface raw internal detail to the client, per code-standards.md's
-  // "Never expose internal exceptions to users."
-  logger.error({ err: error }, "Unexpected error while saving a role");
-  throw new AppError("Failed to save the role. Please try again.");
+  // Routes through the shared Server Action translator so an unexpected
+  // persistence failure is logged server-side (via the Pino logger) instead
+  // of vanishing with zero trace — matches every sibling
+  // translate*PersistError in this codebase (bank-account-service.ts,
+  // ledger-group-service.ts, ledger-service.ts, company-service.ts).
+  throw new AppError(toActionErrorMessage(error));
 }
 
 export const roleService = {
   async listRoles(): Promise<RoleWithPermissionCount[]> {
-    await assertAdministrator();
-    return roleRepository.findMany();
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "roles", "view");
+    return roleRepository.findMany(user.companyId);
   },
 
   async getRole(id: string): Promise<Role | null> {
-    await assertAdministrator();
-    return roleRepository.findById(id);
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "roles", "view");
+    return roleRepository.findById(id, user.companyId);
   },
 
   async createRole(input: RoleFormInput): Promise<Role> {
-    await assertAdministrator();
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "roles", "create");
     const data = roleSchema.parse(input);
 
+    // Custom roles a Company Admin creates are always scoped to their own
+    // company and never system-defined/protected — only
+    // TenantBootstrapService creates isSystemDefined/isProtected roles.
     try {
-      return await roleRepository.create(data.name);
+      return await roleRepository.create(user.companyId, data.name);
     } catch (error) {
       translateRolePersistError(error);
     }
   },
 
   async updateRole(id: string, input: RoleFormInput): Promise<Role> {
-    await assertAdministrator();
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "roles", "edit");
     const data = roleSchema.parse(input);
 
-    const existing = await roleRepository.findById(id);
+    const existing = await roleRepository.findById(id, user.companyId);
     if (!existing) {
       throw new AppError("Role not found.");
     }
 
-    // Almost every admin gate in this codebase (assertAdministrator(),
-    // isCurrentUserAdmin(), and every other module's own check) compares a
-    // role's NAME against a literal string, not an id or a flag. Renaming
-    // one of the six seeded default roles — most critically "Administrator"
-    // — would silently break authorization for every user holding it, with
-    // no in-app recovery path (undoing the rename itself requires passing
-    // the now-broken assertAdministrator() check). Only renaming is
-    // blocked; deactivating a default role, editing its permissions, or
-    // creating new custom roles under any other name is unaffected.
-    const isDefaultRole = (DEFAULT_ROLE_NAMES as readonly string[]).includes(existing.name);
-    if (isDefaultRole && data.name !== existing.name) {
-      throw new AppError(`"${existing.name}" is a built-in role and cannot be renamed.`);
+    // Renaming a protected (reserved) role would silently break every
+    // authorization decision keyed off its name in TenantBootstrapService's
+    // seed data — not renamed via role-service.ts. Deactivating, editing
+    // its permissions (subject to the mandatory-set check in
+    // permission-service.ts), or creating new custom roles under any other
+    // name is unaffected.
+    if (existing.isProtected && data.name !== existing.name) {
+      throw new AppError(`"${existing.name}" is a reserved role and cannot be renamed.`);
     }
 
     let role: Role | null;
     try {
-      role = await roleRepository.update(id, data.name);
+      role = await roleRepository.update(id, user.companyId, data.name);
     } catch (error) {
       translateRolePersistError(error);
     }
@@ -79,8 +86,9 @@ export const roleService = {
   },
 
   async activateRole(id: string): Promise<Role> {
-    await assertAdministrator();
-    const role = await roleRepository.setActive(id, true);
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "roles", "edit");
+    const role = await roleRepository.setActive(id, user.companyId, true);
     if (!role) {
       throw new AppError("Role not found.");
     }
@@ -88,16 +96,64 @@ export const roleService = {
   },
 
   async deactivateRole(id: string): Promise<Role> {
-    await assertAdministrator();
-    const result = await roleRepository.deactivate(id);
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "roles", "delete");
+    const result = await roleRepository.deactivate(id, user.companyId);
 
     switch (result.status) {
       case "not_found":
         throw new AppError("Role not found.");
-      case "last_administrator_capable":
+      case "protected":
+        throw new AppError("This is a reserved role and cannot be deactivated.");
+      case "last_full_coverage_role":
         throw new AppError("At least one active role with full access must remain.");
       case "ok":
         return result.role;
     }
+  },
+
+  /**
+   * Seeds the 6 reserved default roles for a brand-new company and their
+   * RolePermission rows, inside the caller's transaction (called by
+   * TenantBootstrapService as one step of company creation — never invoked
+   * standalone, so it takes no permission gate of its own, mirroring
+   * ledgerGroupService.seedDefaultGroups()'s identical convention). Company
+   * Admin is granted every permission in the live catalog, computed live
+   * (never a fixed list) so it can never fall behind as modules/actions are
+   * added — the other 5 reserved roles get their starting set from
+   * DEFAULT_ROLE_PERMISSIONS. All 6 are isSystemDefined + isProtected.
+   * Returns the new Company Admin role's id so the caller can assign it to
+   * the Company Admin User being created in the same transaction.
+   */
+  async seedDefaultRoles(companyId: string, tx: Prisma.TransactionClient): Promise<{ companyAdminRoleId: string }> {
+    const catalog = await tx.permission.findMany();
+    const catalogIndex = new Map(catalog.map((permission) => [`${permission.module}:${permission.action}`, permission.id]));
+
+    const companyAdminRole = await tx.role.create({
+      data: { companyId, name: COMPANY_ADMIN_ROLE_NAME, isSystemDefined: true, isProtected: true },
+    });
+    if (catalog.length > 0) {
+      await tx.rolePermission.createMany({
+        data: catalog.map((permission) => ({ roleId: companyAdminRole.id, permissionId: permission.id })),
+      });
+    }
+
+    for (const [roleName, pairs] of Object.entries(DEFAULT_ROLE_PERMISSIONS)) {
+      const role = await tx.role.create({
+        data: { companyId, name: roleName, isSystemDefined: true, isProtected: true },
+      });
+
+      const permissionIds = pairs
+        .map((pair) => catalogIndex.get(`${pair.module}:${pair.action}`))
+        .filter((id): id is string => Boolean(id));
+
+      if (permissionIds.length > 0) {
+        await tx.rolePermission.createMany({
+          data: permissionIds.map((permissionId) => ({ roleId: role.id, permissionId })),
+        });
+      }
+    }
+
+    return { companyAdminRoleId: companyAdminRole.id };
   },
 };

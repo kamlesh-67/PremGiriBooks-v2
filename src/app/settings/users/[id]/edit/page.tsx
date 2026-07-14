@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { userService } from "@/modules/users/services/user-service";
 import { UserEditForm } from "@/modules/users/components/user-edit-form";
 import { toUserFormValues } from "@/modules/users/utils/user-form-values";
@@ -11,7 +11,7 @@ interface EditUserPageProps {
 }
 
 export default async function EditUserPage({ params }: EditUserPageProps) {
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
   if (!isAdmin) {
     redirect("/settings/users");
   }

@@ -436,6 +436,198 @@ Internet is required only for future services.
 
 ---
 
+# Multi-Tenant & Governance Architecture
+
+This section merges the permanent decisions from
+`context/feature-specs/ai-architecture-decisions.md` (v1.0) into this
+document, per that file's own precedence rule ("if any feature specification
+conflicts with this document, this document takes precedence" — refers to
+`ai-architecture-decisions.md` itself). Where the current implementation
+does not yet match a decision below, it is called out explicitly in
+**Known Implementation Gaps** rather than silently assumed compliant.
+
+## Tenant Isolation Rule
+
+Every database query for a business entity must scope data using the
+authenticated session's company context, never a client-supplied value.
+
+Correct
+
+```
+where: { companyId: currentCompany.id }
+```
+
+Never
+
+```
+where: { companyId: request.companyId }
+```
+
+Every repository in this codebase that reads or writes a specific business
+record already re-verifies `companyId` matches the requesting user's own
+company (treating a cross-company id as "not found," never leaking
+existence) — established by `user-repository.ts`/`user-service.ts` and
+followed by every module since (`ledger-groups`, `ledgers`,
+`bank-accounts`).
+
+## User Hierarchy
+
+Three conceptual levels, now fully implemented (not just documented) per
+`context/feature-specs/architecture-Migration-Super-Admin-Administration.md`
+and its
+`architecture-Migration-Super-Admin-Administration-Implementation-Plan.md`,
+completed 2026-07-13:
+
+- **Super Admin** — `User.userType === "PLATFORM"`, has no `companyId`/
+  `roleId`. Not a Role (Permanent Architecture Principle 9) — determined
+  purely by `userType`. Creates/activates/deactivates companies, creates
+  the first Company Admin, resets Company Admin passwords, sees every
+  company. Gated by the single hardcoded check `assertSuperAdmin()`
+  (`src/lib/current-user.ts`) — the *only* hardcoded identity check left
+  in the app.
+- **Company Admin** — `User.userType === "COMPANY"`, holding that
+  company's `isSystemDefined`/`isProtected` "Company Admin" role (granted
+  every catalog permission). Manages users, roles, and all data within one
+  company; can never access another company or reach `/administration`.
+  Gated the same way every other Company-side capability is: real
+  `assertPermission()` checks, never a role-name compare (Principle 1/2).
+- **Company Users** — Accountant, Sales, Purchase, Store Manager, Employee,
+  or custom roles, permissioned through RBAC, scoped to one company.
+
+## User Assignment — Target Model vs. Current Implementation
+
+`ai-architecture-decisions.md` specifies users are mapped to companies
+through a `CompanyUser` join table (`User → CompanyUser → Company`) rather
+than a direct `companyId` on `User`, to support multi-company consultants,
+auditors, and shared users.
+
+**Current implementation still diverges from this**: `User.companyId` is a
+direct field (now nullable, to support `PLATFORM` users with no company at
+all — see Known Implementation Gaps item 1, still deferred). `Role` **is**
+now scoped per company (`Role.companyId`, required) — every company has its
+own private clone of the 6 reserved default roles, seeded by
+`TenantBootstrapService` at company-creation time; `Permission` remains a
+global capability-definition catalog (module x action pairs), which is
+correct — it's not tenant data, only `Role`/`RolePermission` needed
+scoping.
+
+## Active Company Context
+
+```
+User → Company Selection → Financial Year Selection → Branch Selection → Dashboard
+```
+
+Unchanged for `COMPANY` users. A `PLATFORM` user never enters this flow at
+all — `getCurrentCompany()`/`getCurrentFinancialYear()` short-circuit to
+`null` for them before any cookie read or DB query (Permanent Architecture
+Principle 5), and `src/proxy.ts` redirects them straight to
+`/administration` on every route outside that tree (and `/profile`, shared
+by both user types). Session stores `userId`/`userType`; `companyId`/
+`financialYearId`/`branchId` remain cookie-based, not session-embedded (an
+earlier, independent 2026-07-13 decision — recorded in
+`context/progress-tracker.md` — not reversed by this migration).
+
+## Company Initialization
+
+Creating a company is an atomic transaction. Per
+`ai-architecture-decisions.md`, creation should initialize: Company,
+Company Admin, Default Financial Year, Company Settings, Default Ledger
+Groups, Default Voucher Types, Default Roles, Default Permissions — with a
+full rollback if any step fails.
+
+**Current implementation now matches this closely**:
+`companyService.createCompany()` (Super-Admin-only,
+`src/modules/company/services/company-service.ts`) creates the `Company`
+row, then `tenantBootstrapService.bootstrapTenant()`
+(`src/modules/administration/services/tenant-bootstrap-service.ts`) — the
+single owner of company initialization (Principle 4) — seeds that
+company's 6 roles + their permissions, the Financial Year, the 23-group
+Ledger Group skeleton, and the default "Cash" Ledger, then the Company
+Admin `User` row is created, all inside one `prisma.$transaction`. Default
+Voucher Types still do not exist (the Voucher Engine is not implemented).
+
+## Authorization Flow
+
+Every mutation must follow:
+
+```
+Authenticate → Resolve User Type
+  → PLATFORM: assertSuperAdmin() → Execute
+  → COMPANY: Resolve Company Context → Check Permission → Execute → Write Audit Log
+```
+
+`assertPermission(user, module, action)` after `getCurrentCompanyUser()` is
+enforced end-to-end for every Company-side mutation, including the ones
+that used to hardcode a role-name check (Company/Company Settings,
+Financial Year, Users, Roles/Permissions) — see Known Implementation Gaps
+item 3 for the scope of `AuditLog` writes (narrow, not universal).
+
+## Repository Rules
+
+Every repository automatically filters by `companyId`, and none perform
+authorization themselves (Permanent Architecture Principle 3 — that
+branching lives in Services only; repositories never check
+`userType`/`PLATFORM`/`COMPANY`). The two Platform-only cross-company
+exceptions (`userRepository.findAllCompanyAdmins()`/`setActiveById()`, for
+the Administration module's Company Admins screen) are gated by
+`assertSuperAdmin()` one layer up, in `platform-user-service.ts`, never in
+the repository.
+
+## Known Implementation Gaps vs. `ai-architecture-decisions.md`
+
+Recorded per this project's precedence rule (record a documentation/code
+conflict before changing code) rather than fixed unilaterally, since each
+is a cross-cutting change spanning authentication, every existing module,
+or both — out of scope for a single-module fix and requiring its own
+scoped feature spec:
+
+1. **User↔Company mapping**: still direct `User.companyId` (now nullable,
+   for `PLATFORM` users), not a `CompanyUser` join table. Migrating to a
+   real join table (for multi-company consultants/auditors/shared users)
+   touches auth, sessions, and every module that reads `user.companyId` —
+   remains its own scoped effort, not attempted by the Super Admin
+   migration.
+2. ~~Role/Permission are global, not per-company~~ — **resolved
+   2026-07-13**. `Role.companyId` is now required; every company has its
+   own private clone of the 6 reserved default roles, seeded by
+   `TenantBootstrapService`. `Permission` correctly remains global (a
+   capability-definition catalog, not tenant data).
+3. **Audit Logging remains narrow, not universal.** A new `AuditLog` model
+   exists (2026-07-13) but its write path covers only the 5 Administration-
+   side tenant-lifecycle events the Super Admin migration introduced
+   (Company Created, Company Admin Created, Company
+   Activated/Deactivated, Company Admin Password Reset) —
+   `auditLogService.record()`,
+   `src/modules/administration/services/audit-log-service.ts`. No other
+   module (Ledger Groups, Ledger Master, Bank Management, Users, Roles,
+   Company Settings) writes an audit trail entry yet; a general retrofit
+   remains a separate, larger effort.
+4. **`createdBy`/`updatedBy` are not present on any business table** —
+   every table has `createdAt`/`updatedAt` but not the actor who made the
+   change. `AuditLog.actorUserId` covers this for the 5 events it records;
+   every other table still has no way to attribute historical writes.
+5. ~~Platform (Super Admin) vs. Company (Company Admin/Company Users) is
+   not yet a real distinction anywhere except the schema~~ — **resolved
+   2026-07-13**. See the User Hierarchy / Authorization Flow sections
+   above and
+   `context/feature-specs/architecture-Migration-Super-Admin-Administration-Implementation-Plan.md`
+   for the full implementation: `userType`-discriminated `CurrentUser`,
+   proxy-level PLATFORM/COMPANY route separation, per-company Roles, the
+   `/administration` module, and the rewritten Company Creation workflow.
+6. **`SystemContext` (`src/lib/system-context.ts`) is the standard for new
+   code, not retrofitted onto the ~15 pre-migration services** that still
+   call `getCurrentUser()`/`getCurrentCompanyUser()` directly
+   (bank-accounts, ledgers, ledger-groups, financial-year,
+   company-settings, users, roles, permissions, profile). Those primitives
+   are already per-request `cache()`-deduped, so this is a pure
+   consistency/readability cleanup, not a correctness gap — tracked as a
+   follow-up, not silently dropped.
+
+These are tracked as open follow-up work in `context/progress-tracker.md`
+rather than implemented ad hoc inside an unrelated feature fix.
+
+---
+
 # Costing Strategy
 
 Current Costing Method

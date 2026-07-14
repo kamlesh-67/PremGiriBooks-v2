@@ -1,9 +1,5 @@
-import Link from "next/link";
-import { Plus } from "lucide-react";
-
 import { AppShell } from "@/components/layout/app-shell";
-import { Button } from "@/components/ui/button";
-import { isCurrentUserAdmin } from "@/lib/current-user";
+import { isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { companyService } from "@/modules/company/services/company-service";
 import { CompanySearchForm } from "@/modules/company/components/company-search-form";
 import { CompanyTable } from "@/modules/company/components/company-table";
@@ -26,32 +22,21 @@ export default async function CompanyListPage({ searchParams }: CompanyListPageP
     search: search || undefined,
     status,
   });
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
 
   return (
     <AppShell isAdmin={isAdmin}>
       <div className="flex flex-col gap-6 p-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">Companies</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage the companies in your ERP.
-            </p>
-          </div>
-          <Button
-            nativeButton={false}
-            render={
-              <Link href="/company/new">
-                <Plus size={18} />
-                New Company
-              </Link>
-            }
-          />
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Company</h1>
+          <p className="text-sm text-muted-foreground">
+            View your company profile. Legal/business info is managed by Super Admin.
+          </p>
         </div>
 
         <CompanySearchForm initialSearch={search} initialStatus={status} />
 
-        <CompanyTable companies={companies} />
+        <CompanyTable companies={companies} canEdit={isAdmin} editBasePath="/company" />
       </div>
     </AppShell>
   );

@@ -12,8 +12,8 @@ export const roleRepository = {
   // inactive role keeps it (see user-form-values.ts callers merging it back
   // in for the Edit page) — this method only governs what's selectable going
   // forward.
-  findMany(): Promise<Role[]> {
-    return prisma.role.findMany({ where: { isActive: true }, orderBy: { name: "asc" } });
+  findMany(companyId: string): Promise<Role[]> {
+    return prisma.role.findMany({ where: { companyId, isActive: true }, orderBy: { name: "asc" } });
   },
 
   findById(id: string): Promise<Role | null> {

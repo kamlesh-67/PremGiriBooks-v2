@@ -1,14 +1,14 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { getCurrentUser, isCurrentUserAdmin } from "@/lib/current-user";
-import { hasPermission } from "@/lib/permissions";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { hasPermission, isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { ledgerGroupService } from "@/modules/ledger-groups/services/ledger-group-service";
 import { LedgerGroupForm } from "@/modules/ledger-groups/components/ledger-group-form";
 import { createLedgerGroupAction } from "@/modules/ledger-groups/actions/ledger-group-actions";
 
 export default async function NewLedgerGroupPage() {
-  const user = await getCurrentUser();
+  const user = await getCurrentCompanyUser();
   const canCreate = await hasPermission(user, "accounting", "create");
   if (!canCreate) {
     redirect("/accounting/ledger-groups");
@@ -16,7 +16,7 @@ export default async function NewLedgerGroupPage() {
 
   const [groups, isAdmin] = await Promise.all([
     ledgerGroupService.listSelectableLedgerGroups(),
-    isCurrentUserAdmin(),
+    isCurrentUserCompanyAdmin(),
   ]);
 
   return (

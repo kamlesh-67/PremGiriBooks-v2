@@ -1,7 +1,8 @@
 import type { Role } from "@prisma/client";
 
 import { AppError } from "@/lib/app-error";
-import { AuthorizationError, type CurrentUser, getCurrentUser } from "@/lib/current-user";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { assertPermission } from "@/lib/permissions";
 import { logger } from "@/lib/logger";
 import { hashPassword } from "@/lib/password";
 import { roleRepository } from "@/modules/users/repositories/role-repository";
@@ -19,14 +20,6 @@ import type {
   UserListFilters,
   UserWithRole,
 } from "@/types/user";
-
-async function requireAdministrator(): Promise<CurrentUser> {
-  const currentUser = await getCurrentUser();
-  if (currentUser.role !== "Administrator") {
-    throw new AuthorizationError();
-  }
-  return currentUser;
-}
 
 function translateUserPersistError(error: unknown): never {
   const fields = getUniqueConstraintFields(error);
@@ -46,16 +39,18 @@ function translateUserPersistError(error: unknown): never {
 
 export const userService = {
   async listUsers(filters: UserListFilters = {}): Promise<UserWithRole[]> {
-    const currentUser = await requireAdministrator();
+    const currentUser = await getCurrentCompanyUser();
+    await assertPermission(currentUser, "users", "view");
     return userRepository.findMany(currentUser.companyId, filters);
   },
 
   // A user belonging to a different company must resolve identically to "not
   // found" — never distinguish "exists but isn't yours" from "doesn't
-  // exist," which would let an Administrator of one company enumerate user
+  // exist," which would let a Company Admin of one company enumerate user
   // ids belonging to another.
   async getUser(id: string): Promise<UserWithRole | null> {
-    const currentUser = await requireAdministrator();
+    const currentUser = await getCurrentCompanyUser();
+    await assertPermission(currentUser, "users", "view");
     const user = await userRepository.findById(id);
     if (!user || user.companyId !== currentUser.companyId) {
       return null;
@@ -64,26 +59,29 @@ export const userService = {
   },
 
   async listRoles(): Promise<Role[]> {
-    await requireAdministrator();
-    return roleRepository.findMany();
+    const currentUser = await getCurrentCompanyUser();
+    await assertPermission(currentUser, "users", "view");
+    return roleRepository.findMany(currentUser.companyId);
   },
 
   // companyId is deliberately never accepted as a parameter here — it is
-  // always the requesting Administrator's own company, derived server-side,
-  // so a tampered client-supplied id can't plant a user (or a new
-  // Administrator) inside a company the caller has no relationship to.
+  // always the requesting Company Admin's own company, derived server-side,
+  // so a tampered client-supplied id can't plant a user (or a new Company
+  // Admin) inside a company the caller has no relationship to.
   async createUser(input: UserFormInput): Promise<UserWithRole> {
-    const currentUser = await requireAdministrator();
+    const currentUser = await getCurrentCompanyUser();
+    await assertPermission(currentUser, "users", "create");
     const data = createUserSchema.parse(input);
 
     const profile = normalizeUserProfileInput(data);
     const passwordHash = await hashPassword(data.password);
 
-    // The role's existence and active status are checked inside
-    // userRepository.create()'s own transaction, not here beforehand — a
-    // separate pre-write read here would leave a TOCTOU window where the
-    // role could be deactivated by another request between the check and
-    // the write. See that method's comment for the full reasoning.
+    // The role's existence, active status, and company ownership are
+    // checked inside userRepository.create()'s own transaction, not here
+    // beforehand — a separate pre-write read here would leave a TOCTOU
+    // window where the role could be deactivated by another request
+    // between the check and the write. See that method's comment for the
+    // full reasoning.
     let result: CreateUserResult;
     try {
       result = await userRepository.create(currentUser.companyId, profile, passwordHash);
@@ -102,7 +100,8 @@ export const userService = {
   },
 
   async updateUser(id: string, input: UserFormInput): Promise<UserWithRole> {
-    const currentUser = await requireAdministrator();
+    const currentUser = await getCurrentCompanyUser();
+    await assertPermission(currentUser, "users", "edit");
     const data = updateUserSchema.parse(input);
 
     const profile = normalizeUserProfileInput(data);
@@ -125,15 +124,16 @@ export const userService = {
         throw new AppError("Selected role does not exist.");
       case "inactive_role":
         throw new AppError("Selected role is inactive and cannot be assigned.");
-      case "last_administrator":
-        throw new AppError("At least one active Administrator must remain for this company.");
+      case "last_active_admin":
+        throw new AppError("At least one active user with full access must remain for this company.");
       case "ok":
         return result.user;
     }
   },
 
   async activateUser(id: string): Promise<UserWithRole> {
-    const currentUser = await requireAdministrator();
+    const currentUser = await getCurrentCompanyUser();
+    await assertPermission(currentUser, "users", "edit");
     const user = await userRepository.setActive(id, currentUser.companyId, true);
     if (!user) {
       throw new AppError("User not found.");
@@ -142,7 +142,8 @@ export const userService = {
   },
 
   async deactivateUser(id: string): Promise<UserWithRole> {
-    const currentUser = await requireAdministrator();
+    const currentUser = await getCurrentCompanyUser();
+    await assertPermission(currentUser, "users", "delete");
 
     const result = await userRepository.deactivate(id, currentUser.companyId, currentUser.id);
     switch (result.status) {
@@ -150,8 +151,8 @@ export const userService = {
         throw new AppError("User not found.");
       case "self":
         throw new AppError("You cannot deactivate your own account.");
-      case "last_administrator":
-        throw new AppError("At least one active Administrator must remain for this company.");
+      case "last_active_admin":
+        throw new AppError("At least one active user with full access must remain for this company.");
       case "ok":
         return result.user;
     }

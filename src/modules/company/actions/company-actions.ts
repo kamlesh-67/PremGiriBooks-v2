@@ -4,57 +4,29 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { toActionErrorMessage } from "@/lib/action-error";
-import { assertAdministrator } from "@/lib/current-user";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { assertPermission } from "@/lib/permissions";
 import { setCurrentCompany } from "@/lib/current-company";
 import { companyService } from "@/modules/company/services/company-service";
 import { companySettingsService } from "@/modules/company/services/company-settings-service";
 import { saveCompanyLogo } from "@/modules/company/services/company-logo-service";
-import type { CompanyInput, CompanySettingsInput } from "@/modules/company/validation/company-schema";
+import type { CompanyProfileInput, CompanySettingsInput } from "@/modules/company/validation/company-schema";
 import type { ActionResult } from "@/types/api";
 import type { CompanySettings, CompanyWithSettings } from "@/types/company";
 
-export async function createCompanyAction(
-  input: CompanyInput
+// Legal/registration-info edit (Super-Admin-only) and activate/deactivate
+// moved to modules/administration/actions/company-admin-actions.ts — those
+// are Platform operations now, per the Company Module split.
+// updateCompanyProfileAction below is the Company Admin-scoped counterpart:
+// same company row, everything except the compliance-sensitive fields.
+
+export async function updateCompanyProfileAction(
+  companyId: string,
+  input: CompanyProfileInput
 ): Promise<ActionResult<CompanyWithSettings>> {
   try {
-    const company = await companyService.createCompany(input);
-    revalidatePath("/company");
-    return { success: true, data: company };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
-}
-
-export async function updateCompanyAction(
-  id: string,
-  input: CompanyInput
-): Promise<ActionResult<CompanyWithSettings>> {
-  try {
-    const company = await companyService.updateCompany(id, input);
-    revalidatePath("/company");
-    revalidatePath(`/company/${id}/edit`);
-    return { success: true, data: company };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
-}
-
-export async function activateCompanyAction(id: string): Promise<ActionResult<CompanyWithSettings>> {
-  try {
-    const company = await companyService.activateCompany(id);
-    revalidatePath("/company");
-    return { success: true, data: company };
-  } catch (error) {
-    return { success: false, error: toActionErrorMessage(error) };
-  }
-}
-
-export async function deactivateCompanyAction(
-  id: string
-): Promise<ActionResult<CompanyWithSettings>> {
-  try {
-    const company = await companyService.deactivateCompany(id);
-    revalidatePath("/company");
+    const company = await companyService.updateCompanyProfile(companyId, input);
+    revalidatePath(`/company/${companyId}/edit`);
     return { success: true, data: company };
   } catch (error) {
     return { success: false, error: toActionErrorMessage(error) };
@@ -67,7 +39,7 @@ export async function updateCompanySettingsAction(
 ): Promise<ActionResult<CompanySettings>> {
   try {
     const settings = await companySettingsService.updateSettings(companyId, input);
-    revalidatePath(`/company/${companyId}/edit`);
+    revalidatePath("/profile");
     return { success: true, data: settings };
   } catch (error) {
     return { success: false, error: toActionErrorMessage(error) };
@@ -78,7 +50,11 @@ export async function uploadCompanyLogoAction(
   formData: FormData
 ): Promise<ActionResult<{ path: string }>> {
   try {
-    await assertAdministrator();
+    // Logo is a Company operational setting (per the original spec's
+    // Company Module split), not a legal/business-info field — gated the
+    // same way companySettingsService.updateSettings is.
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "company", "edit");
 
     const file = formData.get("logo");
     if (!(file instanceof File) || file.size === 0) {

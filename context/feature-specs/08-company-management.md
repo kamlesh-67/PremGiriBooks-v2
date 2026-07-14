@@ -276,6 +276,14 @@ Masters
 
 Visible only to users with Administrator role.
 
+> **Amended 2026-07-13**: Company Management is now split across two
+> modules, per `architecture-Migration-Super-Admin-Administration.md`.
+> Create/Edit-legal-info/Activate/Deactivate moved to `/administration/companies`
+> (Super Admin only — `userType === "PLATFORM"`); the `/company` route
+> under Masters is now Company Admin's read-only view of their own company
+> plus operational settings (theme/date format/currency display/logo) —
+> never legal/business info, and never another company's data.
+
 ---
 
 # Logo Upload
@@ -333,6 +341,14 @@ Only Administrator users may
 - Deactivate Company
 
 Other users may only access companies assigned to them.
+
+> **Amended 2026-07-13**: "Administrator" here means Super Admin
+> (`userType === "PLATFORM"`), gated by `assertSuperAdmin()` — not a Role.
+> `companyService.createCompany()` now runs the full spec workflow (Company
+> → `TenantBootstrapService` → Company Admin User, one transaction, via
+> `tenantBootstrapService.bootstrapTenant()`) instead of just seeding
+> ledger groups/default ledger. A Company Admin's own company (view +
+> operational settings only) is unaffected by this change.
 
 ---
 

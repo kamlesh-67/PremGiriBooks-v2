@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 
 import { AppError } from "@/lib/app-error";
 import { COOKIE_KEYS } from "@/constants/cookie-keys";
-import { resolveFailingClosed } from "@/lib/current-user";
+import { getCurrentUserOrNull, resolveFailingClosed } from "@/lib/current-user";
 import { companyService } from "@/modules/company/services/company-service";
 import type { CompanyWithSettings } from "@/types/company";
 
@@ -15,6 +15,17 @@ export async function getCurrentCompanyId(): Promise<string | null> {
 }
 
 export const getCurrentCompany = cache(async (): Promise<CompanyWithSettings | null> => {
+  // A PLATFORM user (Super Admin) never has tenant context — not merely
+  // "none selected," but never resolved at all, per this migration's
+  // Permanent Architecture Principle 5. Checked before any cookie read or
+  // DB query so this holds even if proxy.ts's route redirect is ever
+  // bypassed or this is called from a shared layout that renders for both
+  // user types (RootLayout does).
+  const currentUser = await getCurrentUserOrNull();
+  if (currentUser?.userType === "PLATFORM") {
+    return null;
+  }
+
   const companyId = await getCurrentCompanyId();
   if (!companyId) {
     return null;

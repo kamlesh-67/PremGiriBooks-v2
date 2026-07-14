@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BookText, ListTree } from "lucide-react";
+import { BookText, Landmark, ListTree } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCurrentUser, isCurrentUserAdmin } from "@/lib/current-user";
-import { hasPermission } from "@/lib/permissions";
+import { getCurrentCompanyUser } from "@/lib/current-user";
+import { hasPermission, isCurrentUserCompanyAdmin } from "@/lib/permissions";
 
 const ACCOUNTING_MODULES = [
   {
@@ -20,16 +20,22 @@ const ACCOUNTING_MODULES = [
     title: "Ledger Master",
     description: "Manage the individual accounting ledgers under each group.",
   },
+  {
+    href: "/accounting/banks",
+    icon: Landmark,
+    title: "Bank Management",
+    description: "Manage your company's bank accounts.",
+  },
 ] as const;
 
 export default async function AccountingHubPage() {
-  const user = await getCurrentUser();
+  const user = await getCurrentCompanyUser();
   const canView = await hasPermission(user, "accounting", "view");
   if (!canView) {
     redirect("/");
   }
 
-  const isAdmin = await isCurrentUserAdmin();
+  const isAdmin = await isCurrentUserCompanyAdmin();
 
   return (
     <AppShell isAdmin={isAdmin}>

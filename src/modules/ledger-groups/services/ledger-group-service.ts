@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { AppError } from "@/lib/app-error";
-import { getCurrentUser } from "@/lib/current-user";
+import { getCurrentCompanyUser } from "@/lib/current-user";
 import { assertPermission } from "@/lib/permissions";
 import { ledgerGroupRepository } from "@/modules/ledger-groups/repositories/ledger-group-repository";
 import { buildLedgerGroupTree } from "@/modules/ledger-groups/utils/ledger-group-tree";
@@ -35,13 +35,13 @@ function translatePersistError(error: unknown): never {
 
 export const ledgerGroupService = {
   async listLedgerGroups(filters: LedgerGroupListFilters = {}): Promise<LedgerGroup[]> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "view");
     return ledgerGroupRepository.findMany(user.companyId, filters);
   },
 
   async listLedgerGroupTree(filters: LedgerGroupListFilters = {}): Promise<LedgerGroupNode[]> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "view");
     const groups = await ledgerGroupRepository.findMany(user.companyId, filters);
     return buildLedgerGroupTree(groups);
@@ -49,7 +49,7 @@ export const ledgerGroupService = {
 
   /** Flat, active-only lookup for parent/ledger selectors, optionally filtered by nature. */
   async listSelectableLedgerGroups(nature?: AccountNature): Promise<LedgerGroup[]> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "view");
     return ledgerGroupRepository.findMany(user.companyId, { status: "active", nature });
   },
@@ -58,7 +58,7 @@ export const ledgerGroupService = {
   // "not found" — never distinguish "exists but isn't yours" from "doesn't
   // exist," mirroring user-service.ts's identical rule.
   async getLedgerGroup(id: string): Promise<LedgerGroup | null> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "view");
 
     const group = await ledgerGroupRepository.findById(id);
@@ -69,7 +69,7 @@ export const ledgerGroupService = {
   },
 
   async createLedgerGroup(input: CreateLedgerGroupInput): Promise<LedgerGroup> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "create");
 
     const data = createLedgerGroupSchema.parse(input);
@@ -110,7 +110,7 @@ export const ledgerGroupService = {
   },
 
   async updateLedgerGroup(id: string, input: UpdateLedgerGroupInput): Promise<LedgerGroup> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "edit");
 
     const data = updateLedgerGroupSchema.parse(input);
@@ -133,7 +133,7 @@ export const ledgerGroupService = {
   },
 
   async activateLedgerGroup(id: string): Promise<LedgerGroup> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", LIFECYCLE_ACTION);
 
     const result = await ledgerGroupRepository.activate(id, user.companyId);
@@ -148,7 +148,7 @@ export const ledgerGroupService = {
   },
 
   async deactivateLedgerGroup(id: string): Promise<LedgerGroup> {
-    const user = await getCurrentUser();
+    const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", LIFECYCLE_ACTION);
 
     const result = await ledgerGroupRepository.deactivate(id, user.companyId);

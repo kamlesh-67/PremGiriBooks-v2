@@ -94,6 +94,11 @@ Support in the UI
 
 Seed these six rows into the `Role` table if they do not already exist (no `Role` seed data exists yet per Database Foundation). Do not build custom role creation here — that is explicitly deferred to `11-role-permissions.md`, matching `07-authentication.md`'s own "Do not implement custom roles yet."
 
+> **Amended 2026-07-13**: "Administrator" is renamed "Company Admin," and
+> all 6 roles are now seeded per-company by `TenantBootstrapService` at
+> company-creation time, not once globally
+> (`architecture-Migration-Super-Admin-Administration.md`).
+
 ---
 
 # Password Security
@@ -119,6 +124,16 @@ This mirrors `07-authentication.md`'s Password Security section exactly, so the 
 - An Administrator cannot deactivate their own account.
 - An Administrator cannot deactivate the last remaining active Administrator for a company — at least one active Administrator must always exist.
 - Inactive users are excluded from any future login (once `07-authentication.md` lands) but their historical records remain visible.
+
+> **Amended 2026-07-13**: `companyId`/`roleId` are enforced by the schema
+> only for `userType === "COMPANY"` users — both are nullable to support a
+> `PLATFORM` user (Super Admin), who has neither. "Only Administrator users
+> may Create/Edit/Activate/Deactivate" is now `assertPermission(user, "users", action)`
+> after `getCurrentCompanyUser()`, not a role-name check — the seeded
+> Company Admin role still passes every one of these via full permission
+> coverage. The "last active Administrator" invariant is now the
+> name-independent "last active user holding a full-catalog-coverage role"
+> (`src/modules/roles/utils/role-coverage.ts`), scoped per company.
 
 ---
 
@@ -277,9 +292,11 @@ Verify
 - Passwords are hashed with Argon2 and never exposed by any service or action.
 - Users can be updated, including an optional password reset.
 - Users can be activated and deactivated.
-- The last active Administrator for a company cannot be deactivated.
-- An Administrator cannot deactivate their own account.
-- The six default roles are seeded and selectable.
+- The last active user in a company holding a role with full permission-catalog coverage
+  (`src/modules/roles/utils/role-coverage.ts`) cannot be deactivated — a structural,
+  name-independent invariant, not tied to any role literally named "Administrator"/"Company Admin".
+- A user cannot deactivate their own account.
+- The six default roles (Company Admin + 5 others) are seeded per company and selectable.
 - User search works by name/username/email/role.
 - No TypeScript errors.
 - No ESLint errors.
