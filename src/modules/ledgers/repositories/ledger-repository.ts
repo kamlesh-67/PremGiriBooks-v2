@@ -4,7 +4,7 @@ import { AppError } from "@/lib/app-error";
 import { prisma } from "@/lib/prisma";
 import { runInTransaction } from "@/lib/transaction";
 import { CASH_IN_HAND_GROUP_NAME } from "@/modules/ledger-groups/constants/default-groups";
-import { isRecordNotFoundError } from "@/modules/ledgers/utils/prisma-errors";
+import { isRecordNotFoundError } from "@/lib/prisma-errors";
 import type {
   ActivateLedgerResult,
   DeactivateLedgerResult,

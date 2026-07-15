@@ -74,6 +74,7 @@ model Company {
   ledgerGroups   LedgerGroup[]
   ledgers        Ledger[]
   bankAccounts   BankAccount[]
+  units          Unit[]
   auditLogs      AuditLog[]
 
   @@index([companyName])
@@ -310,6 +311,32 @@ model BankAccount {
   updatedAt         DateTime        @updatedAt
 
   @@unique([companyId, accountNumber])
+  @@index([companyId])
+}
+
+// Unit of measure master (19-unit-management.md) — the first Inventory
+// Masters table. `symbol` is the short form printed on documents ("PCS"),
+// unique per company independently of `name` so two units can never print
+// identically. `uqcCode` is the optional GST Unit Quantity Code GSTR-1's HSN
+// summary needs per line — a plain optional string until the GST Engine
+// (phase-tracker #31) formalizes it. No isSystemDefined and no seeding:
+// unlike the chart of accounts, nothing structurally depends on any
+// particular unit existing, so every unit is user-created.
+model Unit {
+  id            String   @id @default(uuid())
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id])
+  name          String
+  symbol        String
+  uqcCode       String?
+  decimalPlaces Int      @default(0)
+  description   String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@unique([companyId, symbol])
   @@index([companyId])
 }
 
