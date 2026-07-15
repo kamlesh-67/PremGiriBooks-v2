@@ -5,7 +5,7 @@ import { getCurrentCompanyUser } from "@/lib/current-user";
 import { assertPermission } from "@/lib/permissions";
 import { ledgerGroupRepository } from "@/modules/ledger-groups/repositories/ledger-group-repository";
 import { buildLedgerGroupTree } from "@/modules/ledger-groups/utils/ledger-group-tree";
-import { isUniqueConstraintError } from "@/modules/ledger-groups/utils/prisma-errors";
+import { isUniqueConstraintError } from "@/lib/prisma-errors";
 import {
   createLedgerGroupSchema,
   updateLedgerGroupSchema,

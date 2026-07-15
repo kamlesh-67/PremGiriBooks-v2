@@ -35,10 +35,14 @@ const DECIMAL_PLACES_SCHEMA = z
   .min(0, "Decimal places must be between 0 and 4")
   .max(4, "Decimal places must be between 0 and 4");
 
+// A trimmed-blank description normalizes to undefined (which toPersistData
+// then stores as null), matching UQC_CODE_SCHEMA — without this, clearing
+// the field on the edit form would persist "" instead of null.
 const DESCRIPTION_SCHEMA = z
   .string()
   .trim()
   .max(500, "Description must be at most 500 characters")
+  .transform((value) => (value === "" ? undefined : value))
   .optional();
 
 export const createUnitSchema = z.object({

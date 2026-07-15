@@ -2,7 +2,7 @@ import { AppError } from "@/lib/app-error";
 import { getCurrentCompanyUser } from "@/lib/current-user";
 import { assertPermission } from "@/lib/permissions";
 import { unitRepository, type UnitPersistData } from "@/modules/units/repositories/unit-repository";
-import { isUniqueConstraintError } from "@/modules/units/utils/prisma-errors";
+import { isUniqueConstraintError } from "@/lib/prisma-errors";
 import {
   createUnitSchema,
   updateUnitSchema,

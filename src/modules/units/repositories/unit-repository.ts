@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 import { runInTransaction } from "@/lib/transaction";
-import { isRecordNotFoundError } from "@/modules/units/utils/prisma-errors";
+import { isRecordNotFoundError } from "@/lib/prisma-errors";
 import type {
   ActivateUnitResult,
   DeactivateUnitResult,

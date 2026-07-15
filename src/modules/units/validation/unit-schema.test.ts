@@ -51,6 +51,11 @@ describe("createUnitSchema", () => {
     );
   });
 
+  it("normalizes a blank description to undefined", () => {
+    const result = createUnitSchema.parse({ ...VALID_INPUT, description: "   " });
+    expect(result.description).toBeUndefined();
+  });
+
   it("accepts omitted optional fields", () => {
     const result = createUnitSchema.parse({
       name: "Kilograms",

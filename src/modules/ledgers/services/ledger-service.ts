@@ -8,7 +8,7 @@ import { ledgerRepository } from "@/modules/ledgers/repositories/ledger-reposito
 import { getBankAccountsSubtreeIds } from "@/modules/ledgers/utils/excluded-groups";
 import { getExpenseHeadGroupIds } from "@/modules/ledgers/utils/expense-head-groups";
 import { getIncomeHeadGroupIds } from "@/modules/ledgers/utils/income-head-groups";
-import { isUniqueConstraintError } from "@/modules/ledgers/utils/prisma-errors";
+import { isUniqueConstraintError } from "@/lib/prisma-errors";
 import {
   createLedgerSchema,
   updateLedgerSchema,

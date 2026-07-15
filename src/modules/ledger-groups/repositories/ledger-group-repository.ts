@@ -4,7 +4,7 @@ import { AppError } from "@/lib/app-error";
 import { prisma } from "@/lib/prisma";
 import { runInTransaction } from "@/lib/transaction";
 import { DEFAULT_LEDGER_GROUPS } from "@/modules/ledger-groups/constants/default-groups";
-import { isRecordNotFoundError, isRetryableTransactionError } from "@/modules/ledger-groups/utils/prisma-errors";
+import { isRecordNotFoundError, isRetryableTransactionError } from "@/lib/prisma-errors";
 import type {
   ActivateLedgerGroupResult,
   DeactivateLedgerGroupResult,
