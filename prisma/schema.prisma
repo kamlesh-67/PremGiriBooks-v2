@@ -75,6 +75,7 @@ model Company {
   ledgers        Ledger[]
   bankAccounts   BankAccount[]
   units          Unit[]
+  categories     Category[]
   auditLogs      AuditLog[]
 
   @@index([companyName])
@@ -338,6 +339,34 @@ model Unit {
   @@unique([companyId, name])
   @@unique([companyId, symbol])
   @@index([companyId])
+}
+
+// Product classification tree (20-category-management.md) — the "Stock
+// Group" concept Product Management (phase-tracker #23) will assign every
+// product to. `name` is unique per company across the whole tree (not merely
+// among siblings), matching LedgerGroup's rule and required for an
+// unambiguous flat lookup in the Product form. Unlike LedgerGroup, the
+// parent is editable after creation — a Category carries no inherited
+// classification, so re-parenting only changes presentation/grouping; the
+// service owns the resulting cycle-prevention obligation. No isSystemDefined
+// and no seeding, for the same reason as Unit: nothing structurally depends
+// on any particular category existing.
+model Category {
+  id               String     @id @default(uuid())
+  companyId        String
+  company          Company    @relation(fields: [companyId], references: [id])
+  name             String
+  parentCategoryId String?
+  parentCategory   Category?  @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id])
+  childCategories  Category[] @relation("CategoryHierarchy")
+  description      String?
+  isActive         Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@index([parentCategoryId])
 }
 
 // Scoped narrowly to the Administration-side tenant-lifecycle events the
