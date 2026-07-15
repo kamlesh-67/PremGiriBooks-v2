@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, CalendarRange, FolderTree, Hash, Ruler, Tag } from "lucide-react";
+import { Building2, CalendarRange, FolderTree, Hash, Percent, Ruler, Tag } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +42,12 @@ const MASTERS_MODULES = [
     icon: Hash,
     title: "HSN Codes",
     description: "Manage the HSN and SAC codes used for GST classification of products.",
+  },
+  {
+    href: "/masters/gst-rates",
+    icon: Percent,
+    title: "GST Rates",
+    description: "Manage the GST rate slabs assigned to products and used on documents.",
   },
 ] as const;
 

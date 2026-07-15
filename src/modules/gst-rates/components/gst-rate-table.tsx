@@ -15,52 +15,52 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  activateHsnCodeAction,
-  deactivateHsnCodeAction,
-} from "@/modules/hsn-codes/actions/hsn-code-actions";
-import { HsnCodeStatusBadge } from "@/modules/hsn-codes/components/hsn-code-status-badge";
-import { HsnCodeTypeBadge } from "@/modules/hsn-codes/components/hsn-code-type-badge";
-import type { HsnCode } from "@/types/hsn-code";
+  activateGstRateAction,
+  deactivateGstRateAction,
+} from "@/modules/gst-rates/actions/gst-rate-actions";
+import { GstRateStatusBadge } from "@/modules/gst-rates/components/gst-rate-status-badge";
+import type { GstRate } from "@/types/gst-rate";
 
-interface HsnCodeTableProps {
-  hsnCodes: HsnCode[];
+interface GstRateTableProps {
+  gstRates: GstRate[];
   canEdit?: boolean;
   canManage?: boolean;
 }
 
-export function HsnCodeTable({ hsnCodes, canEdit = false, canManage = false }: HsnCodeTableProps) {
+export function GstRateTable({ gstRates, canEdit = false, canManage = false }: GstRateTableProps) {
   // Tracked per row (not a single pending id) so two rows toggled
   // concurrently each keep their own disabled state — a lone id would be
   // overwritten by the second click and cleared by whichever action finishes
-  // first, re-enabling the still-in-flight row's button.
+  // first, re-enabling the still-in-flight row's button (the
+  // hsn-code-table.tsx review fix, 2026-07-15).
   const [pendingIds, setPendingIds] = React.useState<ReadonlySet<string>>(new Set());
 
-  async function handleToggleActive(hsnCode: HsnCode) {
-    setPendingIds((prev) => new Set(prev).add(hsnCode.id));
-    const action = hsnCode.isActive ? deactivateHsnCodeAction : activateHsnCodeAction;
+  async function handleToggleActive(gstRate: GstRate) {
+    setPendingIds((prev) => new Set(prev).add(gstRate.id));
+    const action = gstRate.isActive ? deactivateGstRateAction : activateGstRateAction;
 
     try {
-      const result = await action(hsnCode.id);
+      const result = await action(gstRate.id);
       if (!result.success) {
-        toast.error(result.error ?? "Failed to update HSN/SAC code status.");
+        toast.error(result.error ?? "Failed to update GST rate status.");
         return;
       }
-      toast.success(hsnCode.isActive ? "HSN/SAC code deactivated." : "HSN/SAC code activated.");
+      toast.success(gstRate.isActive ? "GST rate deactivated." : "GST rate activated.");
     } catch {
-      toast.error("Failed to update HSN/SAC code status.");
+      toast.error("Failed to update GST rate status.");
     } finally {
       setPendingIds((prev) => {
         const next = new Set(prev);
-        next.delete(hsnCode.id);
+        next.delete(gstRate.id);
         return next;
       });
     }
   }
 
-  if (hsnCodes.length === 0) {
+  if (gstRates.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border py-16 text-center">
-        <p className="text-sm text-muted-foreground">No HSN/SAC codes found.</p>
+        <p className="text-sm text-muted-foreground">No GST rates found.</p>
       </div>
     );
   }
@@ -69,25 +69,27 @@ export function HsnCodeTable({ hsnCodes, canEdit = false, canManage = false }: H
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Code</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Description</TableHead>
+          <TableHead>Name</TableHead>
+          <TableHead className="text-right">Rate %</TableHead>
+          <TableHead className="text-right">Cess %</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {hsnCodes.map((hsnCode) => (
-          <TableRow key={hsnCode.id}>
+        {gstRates.map((gstRate) => (
+          <TableRow key={gstRate.id}>
             <TableCell>
-              <span className="font-financial font-medium text-foreground">{hsnCode.code}</span>
+              <span className="font-medium text-foreground">{gstRate.name}</span>
+            </TableCell>
+            <TableCell className="text-right font-financial">
+              {gstRate.ratePercent.toFixed(2)}
+            </TableCell>
+            <TableCell className="text-right font-financial">
+              {gstRate.cessPercent.toFixed(2)}
             </TableCell>
             <TableCell>
-              <HsnCodeTypeBadge codeType={hsnCode.codeType} />
-            </TableCell>
-            <TableCell>{hsnCode.description}</TableCell>
-            <TableCell>
-              <HsnCodeStatusBadge isActive={hsnCode.isActive} />
+              <GstRateStatusBadge isActive={gstRate.isActive} />
             </TableCell>
             <TableCell className="text-right">
               <div className="flex justify-end gap-2">
@@ -98,8 +100,8 @@ export function HsnCodeTable({ hsnCodes, canEdit = false, canManage = false }: H
                     nativeButton={false}
                     render={
                       <Link
-                        href={`/masters/hsn-codes/${hsnCode.id}/edit`}
-                        aria-label="Edit HSN/SAC code"
+                        href={`/masters/gst-rates/${gstRate.id}/edit`}
+                        aria-label="Edit GST rate"
                       >
                         <Pencil size={16} />
                       </Link>
@@ -110,10 +112,10 @@ export function HsnCodeTable({ hsnCodes, canEdit = false, canManage = false }: H
                   <Button
                     variant="outline"
                     size="sm"
-                    disabled={pendingIds.has(hsnCode.id)}
-                    onClick={() => handleToggleActive(hsnCode)}
+                    disabled={pendingIds.has(gstRate.id)}
+                    onClick={() => handleToggleActive(gstRate)}
                   >
-                    {hsnCode.isActive ? "Deactivate" : "Activate"}
+                    {gstRate.isActive ? "Deactivate" : "Activate"}
                   </Button>
                 ) : null}
               </div>

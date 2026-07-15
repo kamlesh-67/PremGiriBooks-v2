@@ -19,6 +19,7 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   categories: "Categories",
   brands: "Brands",
   "hsn-codes": "HSN Codes",
+  "gst-rates": "GST Rates",
   settings: "Settings",
   users: "User Management",
   roles: "Roles & Permissions",
