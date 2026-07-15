@@ -87,6 +87,17 @@ Phase Status
 
 Unit Management (#17, `context/feature-specs/19-unit-management.md` — spec file number 19 because 18 was already taken) implemented 2026-07-14.
 
+Feature-specs for the remaining six items were all drafted 2026-07-14 (spec-file numbers are sequential and never reused, so tracker numbers and spec-file numbers diverge from here on — each spec records its own mapping):
+
+| Tracker # | Feature              | Spec file                                         |
+| --------- | -------------------- | ------------------------------------------------- |
+| 18        | Category Management  | `context/feature-specs/20-category-management.md` |
+| 19        | Brand Management     | `context/feature-specs/21-brand-management.md`    |
+| 20        | HSN Management       | `context/feature-specs/22-hsn-management.md`      |
+| 21        | GST Rate Management  | `context/feature-specs/23-gst-rate-management.md` |
+| 22        | Warehouse Management | `context/feature-specs/24-warehouse-management.md` |
+| 23        | Product Management   | `context/feature-specs/25-product-management.md`  |
+
 | #   | Feature              | Depends On                                          | Status |
 | --- | -------------------- | --------------------------------------------------- | ------ |
 | 17  | Unit Management      | Database Foundation                                 | ✅     |
@@ -94,7 +105,7 @@ Unit Management (#17, `context/feature-specs/19-unit-management.md` — spec fil
 | 19  | Brand Management     | Database Foundation                                 | ⬜     |
 | 20  | HSN Management       | Database Foundation                                 | ⬜     |
 | 21  | GST Rate Management  | Database Foundation                                 | ⬜     |
-| 22  | Warehouse Management | Company + Branch                                    | ⬜     |
+| 22  | Warehouse Management | Company + Branch (see the Branch note in spec 24)   | ⬜     |
 | 23  | Product Management   | Categories + Brands + Units + GST + HSN + Warehouse | ⬜     |
 
 ---
@@ -266,7 +277,7 @@ These are intentionally outside the first production release.
 
 **Next Feature to Implement**
 
-➡ **18 - Category Management** (Inventory Masters group) — no spec drafted yet. Unit Management (#17, `context/feature-specs/19-unit-management.md`) was implemented 2026-07-14 on branch `18-Unit-Managemen`. The next Inventory Masters item in dependency order is Category Management (#18) — but the specific next feature still awaits explicit user direction, since feature-spec 12 (Branch Management) also remains drafted-but-unimplemented from a prior session (see the Phase 1 status-discrepancy note above) and per `ai-workflow-rules.md` only one feature is worked at a time.
+➡ **18 - Category Management** (Inventory Masters group) — spec drafted 2026-07-14 as `context/feature-specs/20-category-management.md`. All six remaining Inventory Masters specs (tracker #18–#23 → spec files 20–25) were drafted 2026-07-14; see the mapping table in the Inventory Masters section above. Unit Management (#17, `context/feature-specs/19-unit-management.md`) was implemented 2026-07-14 on branch `18-Unit-Managemen`. The next Inventory Masters item in dependency order is Category Management (#18) — but the specific next feature still awaits explicit user direction, since feature-spec 12 (Branch Management) also remains drafted-but-unimplemented from a prior session (see the Phase 1 status-discrepancy note above; spec 24 — Warehouse — is written so it is not hard-blocked by that, but the user should confirm ordering) and per `ai-workflow-rules.md` only one feature is worked at a time.
 
 ---
 
