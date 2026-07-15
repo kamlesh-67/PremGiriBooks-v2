@@ -82,22 +82,23 @@ export const categoryService = {
 
     const data = createCategorySchema.parse(input);
 
-    // Parent checks mirror ledgerGroupService.createLedgerGroup(): a plain
-    // read-then-create needs no Serializable protection because a brand-new
-    // category has no descendants, so no cycle can form.
-    if (data.parentCategoryId) {
-      const parent = await categoryRepository.findById(data.parentCategoryId);
-      if (!parent || parent.companyId !== user.companyId) {
-        throw new AppError("Parent category not found.");
-      }
-      if (!parent.isActive) {
-        throw new AppError("Cannot create a category under an inactive parent category.");
-      }
-    }
-
+    // The parent's company-scope/active checks run inside the repository's
+    // own transaction, atomically with the insert — see create()'s comment
+    // for the deactivation race a service-side read-then-create would allow.
     try {
-      return await categoryRepository.create(user.companyId, toPersistData(data));
+      const result = await categoryRepository.create(user.companyId, toPersistData(data));
+      switch (result.status) {
+        case "parent_not_found":
+          throw new AppError("Parent category not found.");
+        case "parent_inactive":
+          throw new AppError("Cannot create a category under an inactive parent category.");
+        case "ok":
+          return result.category;
+      }
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       translatePersistError(error);
     }
   },

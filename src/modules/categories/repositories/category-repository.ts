@@ -8,6 +8,7 @@ import type {
   ActivateCategoryResult,
   Category,
   CategoryListFilters,
+  CreateCategoryResult,
   DeactivateCategoryResult,
   UpdateCategoryResult,
 } from "@/types/category";
@@ -52,13 +53,32 @@ export const categoryRepository = {
     return prisma.category.findUnique({ where: { id } });
   },
 
-  // No Serializable protection on create, matching the split
-  // ledger-group-repository.ts documents on its update(): a brand-new
-  // category has no descendants, so no cycle can form. The parent's
-  // company-scope/active checks happen in the service beforehand, mirroring
-  // ledgerGroupService.createLedgerGroup().
-  create(companyId: string, data: CategoryPersistData): Promise<Category> {
-    return prisma.category.create({ data: { ...data, companyId } });
+  // A brand-new category has no descendants, so no cycle check is needed
+  // here — but the parent's company-scope/active checks must still be atomic
+  // with the insert. A plain read-then-create would race deactivate():
+  // a concurrent deactivation of the chosen parent could pass its own "no
+  // active children" count (this row not yet inserted) while this create
+  // reads the parent as still active, committing an active child under an
+  // inactive parent. Both sides run Serializable, so one of the two aborts
+  // with P2034 and retries. A parentless create takes the same path for one
+  // code shape; it degenerates to a single insert.
+  create(companyId: string, data: CategoryPersistData): Promise<CreateCategoryResult> {
+    return runInTransaction(async (tx) => {
+      if (data.parentCategoryId) {
+        const parent = await tx.category.findUnique({ where: { id: data.parentCategoryId } });
+        // A parent belonging to a different company resolves identically to
+        // "not found" — never reveal cross-company existence.
+        if (!parent || parent.companyId !== companyId) {
+          return { status: "parent_not_found" };
+        }
+        if (!parent.isActive) {
+          return { status: "parent_inactive" };
+        }
+      }
+
+      const category = await tx.category.create({ data: { ...data, companyId } });
+      return { status: "ok", category };
+    }, SERIALIZABLE_RETRY);
   },
 
   /**

@@ -15,6 +15,11 @@ export interface CategoryNode extends Category {
   children: CategoryNode[];
 }
 
+export type CreateCategoryResult =
+  | { status: "parent_not_found" }
+  | { status: "parent_inactive" }
+  | { status: "ok"; category: Category };
+
 export type UpdateCategoryResult =
   | { status: "not_found" }
   | { status: "parent_not_found" }

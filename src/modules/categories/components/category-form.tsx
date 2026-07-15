@@ -3,12 +3,11 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Form,
   FormControl,
@@ -58,8 +57,6 @@ export function CategoryForm({ category, parentOptions }: CategoryFormProps) {
     },
   });
 
-  const parentCategoryId = useWatch({ control: form.control, name: "parentCategoryId" });
-
   async function handleSubmit(data: CreateCategoryInput) {
     setIsSubmitting(true);
     try {
@@ -97,19 +94,28 @@ export function CategoryForm({ category, parentOptions }: CategoryFormProps) {
           )}
         />
 
-        <div className="flex flex-col gap-2">
-          <Label>Parent Category</Label>
-          <CategorySelector
-            categories={parentOptions}
-            value={parentCategoryId}
-            onChange={(id) => form.setValue("parentCategoryId", id, { shouldDirty: true })}
-            placeholder="No parent (top-level category)"
-          />
-          <p className="text-xs text-muted-foreground">
-            Leave unset for a top-level category. A category cannot be moved under itself or one
-            of its own sub-categories.
-          </p>
-        </div>
+        <FormField
+          control={form.control}
+          name="parentCategoryId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Parent Category</FormLabel>
+              <FormControl>
+                <CategorySelector
+                  categories={parentOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="No parent (top-level category)"
+                />
+              </FormControl>
+              <p className="text-xs text-muted-foreground">
+                Leave unset for a top-level category. A category cannot be moved under itself or
+                one of its own sub-categories.
+              </p>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <FormField
           control={form.control}

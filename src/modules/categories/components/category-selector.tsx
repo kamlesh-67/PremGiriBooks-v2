@@ -22,6 +22,11 @@ interface CategorySelectorProps {
   onChange: (categoryId: string | undefined) => void;
   placeholder?: string;
   disabled?: boolean;
+  /** Forwarded to the trigger so FormControl can wire label/description/error
+   * associations (id, aria-describedby, aria-invalid). */
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
 }
 
 function categoryLabel(category: Category): string {
@@ -42,6 +47,7 @@ export function CategorySelector({
   onChange,
   placeholder = "Select a category",
   disabled,
+  ...triggerProps
 }: CategorySelectorProps) {
   return (
     <Select
@@ -55,7 +61,7 @@ export function CategorySelector({
       onValueChange={(next) => onChange(!next || next === NONE_VALUE ? undefined : next)}
       disabled={disabled}
     >
-      <SelectTrigger className="w-full">
+      <SelectTrigger className="w-full" {...triggerProps}>
         <SelectValue placeholder={placeholder}>
           {(current: string | null) => {
             if (!current || current === NONE_VALUE) {
