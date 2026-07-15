@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, CalendarRange, FolderTree, Ruler, Tag } from "lucide-react";
+import { Building2, CalendarRange, FolderTree, Hash, Ruler, Tag } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +36,12 @@ const MASTERS_MODULES = [
     icon: Tag,
     title: "Brands",
     description: "Manage the product brands and manufacturers referenced by products.",
+  },
+  {
+    href: "/masters/hsn-codes",
+    icon: Hash,
+    title: "HSN Codes",
+    description: "Manage the HSN and SAC codes used for GST classification of products.",
   },
 ] as const;
 

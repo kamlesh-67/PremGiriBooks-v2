@@ -57,6 +57,8 @@ export function BrandForm({ brand }: BrandFormProps) {
       }
 
       toast.error(result.error ?? (isEdit ? "Failed to save brand." : "Failed to create brand."));
+    } catch {
+      toast.error(isEdit ? "Failed to save brand." : "Failed to create brand.");
     } finally {
       setIsSubmitting(false);
     }

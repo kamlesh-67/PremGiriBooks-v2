@@ -77,6 +77,7 @@ model Company {
   units          Unit[]
   categories     Category[]
   brands         Brand[]
+  hsnCodes       HsnCode[]
   auditLogs      AuditLog[]
 
   @@index([companyName])
@@ -388,6 +389,41 @@ model Brand {
   updatedAt   DateTime @updatedAt
 
   @@unique([companyId, name])
+  @@index([companyId])
+}
+
+// HSN for goods, SAC for services (22-hsn-management.md) — the Product
+// Architecture supports Trading Product / Service / Expense Item product
+// types, so the master holds both code families from day one.
+enum HsnCodeType {
+  HSN
+  SAC
+}
+
+// HSN/SAC code master (22-hsn-management.md) — the tax-classification codes
+// Product Management (phase-tracker #23) will reference and the GST Engine
+// (#31) / GSTR-1's HSN Summary (#57) will consume per invoice line. `code` is
+// unique per company across BOTH code types (HSN and SAC ranges don't
+// meaningfully collide, and one uniqueness rule keeps the lookup
+// unambiguous). `description` is required — GSTR-1's HSN Summary reports a
+// description per code line, and a bare number is meaningless in the Product
+// form's picker. Company-scoped (not global) per the tenant-isolation rule,
+// and no seeding of the official directory: each business maintains only the
+// handful of codes it trades in, same reasoning as Unit. No default GST rate
+// here — the GST Engine owns HSN→rate mapping, same deferral as Unit's
+// uqcCode.
+model HsnCode {
+  id          String      @id @default(uuid())
+  companyId   String
+  company     Company     @relation(fields: [companyId], references: [id])
+  code        String
+  codeType    HsnCodeType @default(HSN)
+  description String
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([companyId, code])
   @@index([companyId])
 }
 
