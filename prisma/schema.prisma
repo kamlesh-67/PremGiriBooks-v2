@@ -76,6 +76,7 @@ model Company {
   bankAccounts   BankAccount[]
   units          Unit[]
   categories     Category[]
+  brands         Brand[]
   auditLogs      AuditLog[]
 
   @@index([companyName])
@@ -367,6 +368,27 @@ model Category {
   @@unique([companyId, name])
   @@index([companyId])
   @@index([parentCategoryId])
+}
+
+// Brand/manufacturer master (21-brand-management.md) — publishers in the
+// book trade, paint manufacturers in the future formula-management vertical.
+// The flat, company-scoped label Product Management (phase-tracker #23) will
+// assign products to. No isSystemDefined and no seeding, same reasoning as
+// Unit: nothing structurally depends on any particular brand existing. No
+// hierarchy either — unlike Categories, brands have no grouping semantics
+// anywhere in this ERP's plans (YAGNI).
+model Brand {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, name])
+  @@index([companyId])
 }
 
 // Scoped narrowly to the Administration-side tenant-lifecycle events the
