@@ -168,9 +168,17 @@ Master since Units.
 - `name`, `productCode`, and `barcode` (when present) are each unique within their company
   (DB-enforced). Surface each conflict with a field-specific friendly message.
 - **Every referenced master must belong to the same company and be active at assignment
-  time** (server-verified inside the write transaction — never trust client ids). A master
-  deactivated *after* assignment does not invalidate existing products; it only disappears
-  from the pickers for new assignments (each master's `listSelectable…()` rule).
+  time** (server-verified inside the write transaction — never trust client ids). "At
+  assignment time" is load-bearing: on **update**, the company-scope + active checks apply
+  only to references that are *newly assigned or changed* relative to the stored row. A
+  reference the update leaves unchanged is preserved as-is — even if that master has been
+  deactivated since it was assigned — otherwise an unrelated edit (fixing a typo in the
+  product name) would be blocked by a since-deactivated brand, contradicting the next
+  sentence. Changed or newly assigned ids are always fully re-verified (active +
+  same-company), so an inactive or cross-company master can never be *introduced* via
+  update. A master deactivated *after* assignment does not invalidate existing products; it
+  only disappears from the pickers for new assignments (each master's `listSelectable…()`
+  rule).
 - `hsnCodeId`, when set, should match the product type: goods (`TRADING`/`EXPENSE`) pick
   `HSN`-type codes, `SERVICE` picks `SAC`-type codes. Enforce as a validation error at the
   service boundary (the HSN lookup is already filterable by `codeType` per
@@ -209,9 +217,12 @@ src/types/product.ts
   the detail/edit view), `createProduct(input)`, `updateProduct(id, input)`,
   `activateProduct(id)`, `deactivateProduct(id)`, and `listSelectableProducts()` (active
   only — the lookup Sales/Purchase/Inventory will consume).
-- Create/Update verify all supplied master references (company scope + active) inside
-  `runInTransaction`, then write — the same read-check-write shape as every prior master,
-  just over more references.
+- Create verifies **all** supplied master references (company scope + active) inside
+  `runInTransaction`, then writes. Update first reads the stored row (company-scoped, in the
+  same transaction), diffs each reference field against it, and re-verifies **only the
+  changed or newly assigned** ids — unchanged references pass through untouched, even if
+  that master has since been deactivated (see Business Rules). Same read-check-write shape
+  as every prior master, just over more references.
 - Server Actions use the shared `runAction` envelope (`src/lib/run-action.ts`).
 
 ---
@@ -226,7 +237,8 @@ Zod (`product-schema.ts`):
   characters
 - Product Type — required enum: `TRADING` / `SERVICE` / `EXPENSE`
 - Category / Brand / HSN Code / GST Rate / Default Warehouse — optional uuids (server
-  re-verifies scope, active status, and the HSN-vs-SAC type match)
+  re-verifies scope, active status, and the HSN-vs-SAC type match — on update, scope/active
+  re-verification applies to changed or newly assigned ids only; see Business Rules)
 - Unit — required uuid (server re-verifies)
 - MRP / Selling Price / Purchase Price — optional numbers, ≥ 0, max 2 decimal places
 - Min Stock Level — optional number, ≥ 0, decimals limited to the selected unit's
@@ -323,7 +335,8 @@ Verify
   code.
 - `minStockLevel` respects the selected unit's `decimalPlaces`.
 - Deactivating a referenced master (e.g. a brand) leaves existing products intact and only
-  removes it from pickers.
+  removes it from pickers; editing such a product *without changing* that reference still
+  saves, while changing any reference to an inactive or cross-company master is rejected.
 - No delete is possible anywhere.
 - `/masters` hub shows the Products card; breadcrumbs label `/masters/products` as
   "Products".

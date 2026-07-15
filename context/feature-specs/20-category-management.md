@@ -116,13 +116,28 @@ user-created.
   may change `parentCategoryId` (plus `name`/`description`). This buys back the
   cycle-prevention obligation Ledger Groups designed away:
   **the service must reject setting a category's parent to itself or to any of its own
-  descendants** (walk the descendant set inside the same transaction as the update, mirroring
-  the read-check-write pattern of `ledger-repository.ts`).
+  descendants**, and the check must be concurrency-safe: walk the descendant set and write
+  inside one `runInTransaction` with **Serializable isolation + bounded retry** (the
+  documented "read-check-write → Serializable + bounded retry" recipe of
+  `ledger-group-repository.ts`, `src/lib/transaction.ts`'s `retryable` option). Without
+  Serializable isolation, two concurrent re-parents (A under B, B under A) each pass their
+  own read-check and commit a cycle — classic write skew. On a `P2034` serialization
+  conflict, retry; if retries are exhausted, surface the friendly conflict message the same
+  way the ledger-groups module does.
 - The parent, when supplied, must belong to the same company and be **active** at assignment
-  time. A parent later deactivated does not cascade to children (see next rule for the
-  reverse direction).
+  time. A parent later deactivated does not cascade to children (see the deactivation rule
+  below for the reverse direction).
+- **A category cannot be activated while its parent is inactive** — the mirror of the
+  deactivation invariant below, exactly as `ledger-group-repository.ts`'s `activate()`
+  enforces it (and under the same Serializable + retry protection: without it, a concurrent
+  deactivation of the parent could pass its own "no active children" check while this
+  activation reads the parent as still active).
 - **A category cannot be deactivated while it has any active child category** — the same
-  invariant, transactionally checked, as Ledger Groups. Forward-compatible rule to record
+  invariant as Ledger Groups, protected the same way: the child-count check and the
+  deactivation write run in one Serializable + bounded-retry transaction, exactly mirroring
+  `ledger-group-repository.ts`'s `deactivate()`. Serializable isolation is what closes both
+  sides of the race — a concurrent "re-parent/activate a child under this category" and a
+  concurrent "deactivate this category" cannot both commit. Forward-compatible rule to record
   now: once Product Management (tracker #23) exists, deactivation should also warn/block
   while active products reference the category. Nothing to check against yet — no product
   table exists.
@@ -150,9 +165,16 @@ src/types/category.ts
   `createCategory(input)`, `updateCategory(id, input)`, `activateCategory(id)`,
   `deactivateCategory(id)`, and `listSelectableCategories()` (active only — the lookup
   Product Management will consume).
-- Repository mirrors `unit-repository.ts`; the update path (which may re-parent) and
-  deactivate path run their read-check-write inside `runInTransaction` (cycle check and
-  active-child check respectively).
+- Repository mirrors `unit-repository.ts` for plain reads/writes, but the update path
+  (which may re-parent — cycle check + new-parent-active check), the activate path
+  (parent-active check), and the deactivate path (active-child check) follow
+  `ledger-group-repository.ts` instead: `runInTransaction` with
+  `Prisma.TransactionIsolationLevel.Serializable` + the `retryable` bounded-retry option
+  (a module-level `SERIALIZABLE_RETRY` constant, as that file does), translating `P2034`
+  into a friendly retry-conflict message (see Business Rules for why plain Read Committed
+  read-check-write is not enough here). Create and rename-only writes need no Serializable
+  protection — a brand-new category has no descendants — matching the same split
+  `ledger-group-repository.ts` documents on its `update()`.
 - Server Actions use the shared `runAction` envelope (`src/lib/run-action.ts`).
 
 ---

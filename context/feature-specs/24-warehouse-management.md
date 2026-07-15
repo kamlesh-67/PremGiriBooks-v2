@@ -143,12 +143,25 @@ depends structurally on a warehouse row existing.
   active at assignment time (server-verified — never trust the client). A branch later
   deactivated does not cascade to its warehouses.
 - **At most one default warehouse per company.** Setting `isDefault` on a warehouse clears
-  the flag from any other warehouse of that company inside the same transaction (mirroring
-  `financial-year-service.ts`'s "only one current" write pattern). Only an **active**
-  warehouse can be made default.
+  the flag from any other warehouse of that company inside the same transaction, and that
+  transaction must run with **Serializable isolation + bounded retry** (`runInTransaction`'s
+  `isolationLevel` + `retryable` options, mirroring `financial-year-repository.ts`'s
+  identical "only one current flag" recipe and its `SERIALIZABLE_RETRY` constant). Plain
+  Read Committed is not enough: two concurrent set-default calls each clear the *other's*
+  flag and set their own; Serializable makes Postgres abort one with `P2034`, the bounded
+  retry re-runs it, and the invariant holds (last committed write wins). If retries are
+  exhausted, surface a friendly "changed by another request, please try again" conflict
+  message via the module's `prisma-errors.ts`, as the financial-year module does. Only an
+  **active** warehouse can be made default.
+  *Considered and rejected*: enforcing this with a Postgres partial unique index
+  (`UNIQUE … WHERE "isDefault"`). Prisma's schema language cannot declare one (it would be
+  hand-written migration SQL invisible to the schema), and the codebase already has an
+  established, tested convention for exactly this invariant — `FinancialYear.isCurrent`'s
+  service-enforced Serializable transaction. One convention beats two.
 - **Deactivating the default warehouse clears its `isDefault` flag in the same
   transaction** — a company may validly have no default. An inactive warehouse must never
-  remain the default.
+  remain the default. This read-check-write runs under the same Serializable + retry
+  protection (a concurrent set-default targeting the same warehouse is the race).
 - **All fields remain editable.** Nothing references a warehouse until Product Management /
   the Inventory Engine exist. Forward-compatible rule to record now: once stock movements
   exist, deactivating a warehouse that still holds nonzero stock must be blocked (Inventory
@@ -177,8 +190,13 @@ src/types/warehouse.ts
   `deactivateWarehouse(id)`, `setDefaultWarehouse(id)`, `unsetDefaultWarehouse(id)`, and
   `listSelectableWarehouses()` (active only — the lookup Product Management and the
   Inventory Engine will consume).
-- Repository mirrors `unit-repository.ts`; the set-default, deactivate, and update paths run
-  their read-check-write (and the clear-other-defaults write) inside `runInTransaction`.
+- Repository mirrors `unit-repository.ts` for plain reads/writes; the set-default,
+  unset-default, and deactivate paths run their read-check-write (and the
+  clear-other-defaults write) inside `runInTransaction` with **Serializable isolation +
+  bounded retry** per the Business Rules above (module-level `SERIALIZABLE_RETRY` constant
+  and `P2034`-aware `prisma-errors.ts`, mirroring `financial-year-repository.ts`). Plain
+  update (which never touches `isDefault` — see Validation) needs only the ordinary scoped
+  transaction.
 - Server Actions use the shared `runAction` envelope (`src/lib/run-action.ts`).
 
 ---
