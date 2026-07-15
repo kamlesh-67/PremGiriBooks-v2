@@ -78,6 +78,7 @@ model Company {
   categories     Category[]
   brands         Brand[]
   hsnCodes       HsnCode[]
+  gstRates       GstRate[]
   auditLogs      AuditLog[]
 
   @@index([companyName])
@@ -424,6 +425,35 @@ model HsnCode {
   updatedAt   DateTime    @updatedAt
 
   @@unique([companyId, code])
+  @@index([companyId])
+}
+
+// GST rate slab master (23-gst-rate-management.md) — the rate slabs Product
+// Management (phase-tracker #23) will assign to products and the GST Engine
+// (#31) will read to compute CGST/SGST/IGST and cess on documents. Stores
+// only the TOTAL rate plus cess: the CGST+SGST/IGST split is pure arithmetic
+// (half/half vs full) owned exclusively by the GST Engine, so storing the
+// components would duplicate derivable data. `name` (not the numbers) is the
+// display label pickers and documents show, unique per company; duplicate
+// percentages under different names are deliberately allowed. Decimal(5,2)
+// matches the codebase's Decimal-for-money/percentage convention
+// (Ledger.openingBalance), and two decimals are required for the statutory
+// 0.25% slab. No isSystemDefined and no seeding — slabs change by government
+// notification and nothing depends structurally on any particular row
+// existing, same reasoning as Unit.
+model GstRate {
+  id          String   @id @default(uuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  name        String
+  ratePercent Decimal  @db.Decimal(5, 2)
+  cessPercent Decimal  @default(0) @db.Decimal(5, 2)
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([companyId, name])
   @@index([companyId])
 }
 
