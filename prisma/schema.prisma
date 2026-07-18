@@ -131,6 +131,11 @@ model Branch {
   company    Company     @relation(fields: [companyId], references: [id])
   warehouses Warehouse[]
 
+  // Referenced by Warehouse's composite tenant-safe FK (companyId, branchId)
+  // → (companyId, id); Postgres requires a unique constraint covering the
+  // referenced column pair. Redundant with id's PK for lookups, load-bearing
+  // for the FK.
+  @@unique([companyId, id])
   @@unique([companyId, branchCode])
 }
 
@@ -478,8 +483,15 @@ model Warehouse {
   id            String   @id @default(uuid())
   companyId     String
   company       Company  @relation(fields: [companyId], references: [id])
+  // Composite tenant-safe FK (review fix, 2026-07-18): relating
+  // (companyId, branchId) → Branch(companyId, id) makes the DB itself reject
+  // a cross-company branch link, as defense-in-depth behind the repository's
+  // assertAssignableBranch check. MATCH SIMPLE semantics keep the branchless
+  // (branchId NULL) case fully supported. Prisma emits ON DELETE RESTRICT
+  // here (a required column is part of the FK) — fine, since branches are
+  // never deleted anywhere in this codebase (Activate/Deactivate only).
   branchId      String?
-  branch        Branch?  @relation(fields: [branchId], references: [id])
+  branch        Branch?  @relation(fields: [companyId, branchId], references: [companyId, id])
   name          String
   code          String
   address       String?
