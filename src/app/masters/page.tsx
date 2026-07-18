@@ -5,6 +5,7 @@ import {
   CalendarRange,
   FolderTree,
   Hash,
+  Package,
   Percent,
   Ruler,
   Tag,
@@ -63,6 +64,12 @@ const MASTERS_MODULES = [
     icon: Warehouse,
     title: "Warehouses",
     description: "Manage the physical stock locations referenced by products and stock documents.",
+  },
+  {
+    href: "/masters/products",
+    icon: Package,
+    title: "Products",
+    description: "Manage the product/item master referenced by sales, purchase, and stock documents.",
   },
 ] as const;
 
