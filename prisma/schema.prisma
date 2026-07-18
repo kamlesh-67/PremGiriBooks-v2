@@ -80,6 +80,7 @@ model Company {
   hsnCodes       HsnCode[]
   gstRates       GstRate[]
   warehouses     Warehouse[]
+  products       Product[]
   auditLogs      AuditLog[]
 
   @@index([companyName])
@@ -346,6 +347,8 @@ model Unit {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  products Product[]
+
   @@unique([companyId, name])
   @@unique([companyId, symbol])
   @@index([companyId])
@@ -373,6 +376,7 @@ model Category {
   isActive         Boolean    @default(true)
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
+  products         Product[]
 
   @@unique([companyId, name])
   @@index([companyId])
@@ -395,6 +399,8 @@ model Brand {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  products Product[]
 
   @@unique([companyId, name])
   @@index([companyId])
@@ -430,6 +436,7 @@ model HsnCode {
   isActive    Boolean     @default(true)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
+  products    Product[]
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -459,6 +466,7 @@ model GstRate {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  products    Product[]
 
   @@unique([companyId, name])
   @@index([companyId])
@@ -501,10 +509,84 @@ model Warehouse {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  products Product[]
+
   @@unique([companyId, name])
   @@unique([companyId, code])
   @@index([companyId])
   @@index([branchId])
+}
+
+// Trading Product / Service / Expense Item per architecture-context.md's
+// Product Architecture (25-product-management.md). FORMULA is deliberately
+// NOT added — it is reserved for the future manufacturing release, and
+// adding an enum value later is a trivial migration (YAGNI).
+enum ProductType {
+  TRADING
+  SERVICE
+  EXPENSE
+}
+
+// Product/item master (25-product-management.md) — the master every
+// stock-bearing and billing feature (Sales #41, Purchase #42, Inventory
+// Engine #30, Pricing Engine #28, Opening Stock #44, Barcode Billing #76)
+// will reference. Master data ONLY: reference prices (mrp / sellingPrice /
+// purchasePrice) are plain stored data — every derived price is the Pricing
+// Engine's job and every quantity movement is the Inventory Engine's
+// (architecture-context.md Invariants 6–7). `purchasePrice` is the
+// manually-entered starting value for the "Latest Purchase Cost" costing
+// strategy; the Purchase module (#42) will later overwrite it on each
+// purchase. `productCode` is the required user-entered SKU (no
+// auto-numbering — the Document Number Engine #32 owns numbering);
+// `barcode` is optional and unique per company when present (Postgres
+// composite unique treats NULLs as distinct, so many products may omit it) —
+// stored now so Barcode Billing has data to build on. `unitId` is required
+// for every type, including services (billed in Hours/Nos/Jobs); the other
+// classification links are optional — not every business classifies every
+// product, exempt/unregistered scenarios exist, and single-location shops
+// may never create a warehouse. `minStockLevel` is Decimal(14,4) because
+// quantities honor the unit's decimalPlaces (0–4). Once the Inventory
+// Engine records movements for a product, `unitId` and `productType` must
+// become immutable (changing them would silently re-denominate history) —
+// nothing to check against yet. No isSystemDefined and no seeding, same
+// reasoning as every Inventory Master since Unit. No delete anywhere —
+// Activate/Deactivate only.
+model Product {
+  id                 String      @id @default(uuid())
+  companyId          String
+  company            Company     @relation(fields: [companyId], references: [id])
+  name               String
+  productCode        String
+  barcode            String?
+  productType        ProductType @default(TRADING)
+  categoryId         String?
+  category           Category?   @relation(fields: [categoryId], references: [id])
+  brandId            String?
+  brand              Brand?      @relation(fields: [brandId], references: [id])
+  unitId             String
+  unit               Unit        @relation(fields: [unitId], references: [id])
+  hsnCodeId          String?
+  hsnCode            HsnCode?    @relation(fields: [hsnCodeId], references: [id])
+  gstRateId          String?
+  gstRate            GstRate?    @relation(fields: [gstRateId], references: [id])
+  defaultWarehouseId String?
+  defaultWarehouse   Warehouse?  @relation(fields: [defaultWarehouseId], references: [id])
+  mrp                Decimal?    @db.Decimal(14, 2)
+  sellingPrice       Decimal?    @db.Decimal(14, 2)
+  purchasePrice      Decimal?    @db.Decimal(14, 2)
+  minStockLevel      Decimal?    @db.Decimal(14, 4)
+  description        String?
+  isActive           Boolean     @default(true)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@unique([companyId, name])
+  @@unique([companyId, productCode])
+  @@unique([companyId, barcode])
+  @@index([companyId])
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([unitId])
 }
 
 // Scoped narrowly to the Administration-side tenant-lifecycle events the

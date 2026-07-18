@@ -65,7 +65,7 @@ Implement all master data and shared business engines required by transactional 
 
 Phase Status
 
-🟨 In Progress — Accounting Foundation group complete (all 5 implemented as of 2026-07-14). Inventory Masters nearly complete: Unit Management (#17, `context/feature-specs/19-unit-management.md`) implemented 2026-07-14; Category Management (#18, `context/feature-specs/20-category-management.md`) implemented 2026-07-15; Brand Management (#19, `context/feature-specs/21-brand-management.md`) implemented 2026-07-15; HSN Management (#20, `context/feature-specs/22-hsn-management.md`) implemented 2026-07-15; GST Rate Management (#21, `context/feature-specs/23-gst-rate-management.md`) implemented 2026-07-15; Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) implemented 2026-07-18; only Product Management (#23) remains. Business Parties, Pricing, and Shared ERP Engines groups below are not started.
+🟨 In Progress — Accounting Foundation group complete (all 5 implemented as of 2026-07-14). Inventory Masters group complete (all 7 implemented as of 2026-07-18): Unit Management (#17, `context/feature-specs/19-unit-management.md`) implemented 2026-07-14; Category Management (#18, `context/feature-specs/20-category-management.md`) implemented 2026-07-15; Brand Management (#19, `context/feature-specs/21-brand-management.md`) implemented 2026-07-15; HSN Management (#20, `context/feature-specs/22-hsn-management.md`) implemented 2026-07-15; GST Rate Management (#21, `context/feature-specs/23-gst-rate-management.md`) implemented 2026-07-15; Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) implemented 2026-07-18; Product Management (#23, `context/feature-specs/25-product-management.md`) implemented 2026-07-18. Business Parties, Pricing, and Shared ERP Engines groups below are not started.
 
 ---
 
@@ -85,7 +85,7 @@ Phase Status
 
 ## Inventory Masters
 
-Unit Management (#17, `context/feature-specs/19-unit-management.md` — spec file number 19 because 18 was already taken) implemented 2026-07-14. Category Management (#18, `context/feature-specs/20-category-management.md`) implemented 2026-07-15. Brand Management (#19, `context/feature-specs/21-brand-management.md`) implemented 2026-07-15. HSN Management (#20, `context/feature-specs/22-hsn-management.md`) implemented 2026-07-15. GST Rate Management (#21, `context/feature-specs/23-gst-rate-management.md`) implemented 2026-07-15. Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) implemented 2026-07-18 — with the optional branch link only, since Branch Management (feature-spec 12) remains unimplemented (see the Phase 1 note).
+✅ Completed — Unit Management (#17, `context/feature-specs/19-unit-management.md` — spec file number 19 because 18 was already taken) implemented 2026-07-14. Category Management (#18, `context/feature-specs/20-category-management.md`) implemented 2026-07-15. Brand Management (#19, `context/feature-specs/21-brand-management.md`) implemented 2026-07-15. HSN Management (#20, `context/feature-specs/22-hsn-management.md`) implemented 2026-07-15. GST Rate Management (#21, `context/feature-specs/23-gst-rate-management.md`) implemented 2026-07-15. Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) implemented 2026-07-18 — with the optional branch link only, since Branch Management (feature-spec 12) remains unimplemented (see the Phase 1 note). Product Management (#23, `context/feature-specs/25-product-management.md`) implemented 2026-07-18, closing the group.
 
 Feature-specs for the remaining six items were all drafted 2026-07-14 (spec-file numbers are sequential and never reused, so tracker numbers and spec-file numbers diverge from here on — each spec records its own mapping):
 
@@ -106,7 +106,7 @@ Feature-specs for the remaining six items were all drafted 2026-07-14 (spec-file
 | 20  | HSN Management       | Database Foundation                                 | ✅     |
 | 21  | GST Rate Management  | Database Foundation                                 | ✅     |
 | 22  | Warehouse Management | Company + Branch (see the Branch note in spec 24)   | ✅     |
-| 23  | Product Management   | Categories + Brands + Units + GST + HSN + Warehouse | ⬜     |
+| 23  | Product Management   | Categories + Brands + Units + GST + HSN + Warehouse | ✅     |
 
 ---
 
