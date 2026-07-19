@@ -109,6 +109,10 @@ export const postVoucherInputSchema = z
   .refine((data) => isBalanced(data.entries), {
     message: "Total debit must equal total credit",
     path: ["entries"],
+  })
+  .refine((data) => Boolean(data.referenceType) === Boolean(data.referenceId), {
+    message: "referenceType and referenceId must both be provided together, or both omitted",
+    path: ["referenceId"],
   });
 
 export type PostVoucherInput = z.infer<typeof postVoucherInputSchema>;

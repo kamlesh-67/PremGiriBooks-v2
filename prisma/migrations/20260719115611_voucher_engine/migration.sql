@@ -78,3 +78,9 @@ ALTER TABLE "VoucherEntry" ADD CONSTRAINT "VoucherEntry_voucherId_fkey" FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE "VoucherEntry" ADD CONSTRAINT "VoucherEntry_ledgerId_fkey" FOREIGN KEY ("ledgerId") REFERENCES "Ledger"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- CheckConstraint
+ALTER TABLE "VoucherEntry" ADD CONSTRAINT "VoucherEntry_amount_positive" CHECK ("amount" > 0);
+
+-- CheckConstraint
+ALTER TABLE "Voucher" ADD CONSTRAINT "Voucher_totalAmount_positive" CHECK ("totalAmount" > 0);

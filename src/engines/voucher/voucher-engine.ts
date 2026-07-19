@@ -1,6 +1,7 @@
 import { Prisma, type DocumentType, type VoucherType } from "@prisma/client";
 
 import { AppError } from "@/lib/app-error";
+import { isUniqueConstraintError } from "@/lib/prisma-errors";
 import { runInTransaction } from "@/lib/transaction";
 import { documentNumberEngine } from "@/engines/document-number/document-number-engine";
 import { postVoucherInputSchema, toUtcDate, type VoucherEntryLineInput } from "@/engines/voucher/voucher-validation";
@@ -152,7 +153,19 @@ export async function cancelVoucher(companyId: string, id: string): Promise<Post
       documentType,
     });
 
-    return voucherRepository.reverse(tx, companyId, original, generated);
+    try {
+      return await voucherRepository.reverse(tx, companyId, original, generated);
+    } catch (error) {
+      // A truly concurrent cancellation of the same voucher can pass the
+      // `current.status === "POSTED"` re-check above (read-committed
+      // isolation doesn't see the peer's uncommitted write) and only collide
+      // here, on `reversalOfId`'s unique constraint — surface the same
+      // friendly rejection instead of a raw Prisma error.
+      if (isUniqueConstraintError(error, "reversalOfId")) {
+        throw new AppError("Only a posted voucher can be cancelled.");
+      }
+      throw error;
+    }
   });
 }
 

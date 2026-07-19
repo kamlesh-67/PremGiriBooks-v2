@@ -13,6 +13,7 @@ import type {
   PostVoucherInput,
   VoucherListFilters,
 } from "@/engines/voucher/types";
+import { toPaise } from "@/engines/voucher/voucher-validation";
 
 type PrismaClientOrTransaction = typeof prisma | Prisma.TransactionClient;
 
@@ -112,7 +113,7 @@ export const voucherRepository = {
   ): Promise<PostedVoucher> {
     const totalAmount = input.entries
       .filter((entry) => entry.entryType === "DEBIT")
-      .reduce((sum, entry) => sum + Math.round(entry.amount * 100), 0) / 100;
+      .reduce((sum, entry) => sum + toPaise(entry.amount), 0) / 100;
 
     const created = await tx.voucher.create({
       data: {

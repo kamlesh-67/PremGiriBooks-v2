@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // Mirrors pricing-engine.test.ts's convention — mock the module-boundary
@@ -240,6 +241,27 @@ describe("cancelVoucher", () => {
 
     await expect(cancelVoucher(COMPANY_ID, "v-1")).rejects.toThrow("Only a posted voucher can be cancelled.");
     expect(reverseMock).not.toHaveBeenCalled();
+  });
+
+  it("translates a truly concurrent cancellation's reversalOfId unique-constraint collision into the same friendly rejection", async () => {
+    // Both concurrent transactions pass the `current.status === "POSTED"`
+    // re-check (read-committed isolation never sees the peer's uncommitted
+    // write) — the loser only collides once it tries to insert its own
+    // reversal row against the same `reversalOfId`.
+    reverseMock.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+        code: "P2002",
+        clientVersion: "7.8.0",
+        meta: { target: ["reversalOfId"] },
+      })
+    );
+
+    await expect(cancelVoucher(COMPANY_ID, "v-1")).rejects.toThrow("Only a posted voucher can be cancelled.");
+  });
+
+  it("does not mask an unrelated error raised while reversing", async () => {
+    reverseMock.mockRejectedValueOnce(new Error("connection reset"));
+    await expect(cancelVoucher(COMPANY_ID, "v-1")).rejects.toThrow("connection reset");
   });
 
   it("posts the mirrored reversal and returns it", async () => {

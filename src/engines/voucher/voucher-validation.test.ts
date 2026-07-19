@@ -195,4 +195,24 @@ describe("postVoucherInputSchema", () => {
       )
     ).toThrow();
   });
+
+  const REFERENCE_ID = "55555555-5555-4555-8555-555555555555";
+
+  it("accepts both referenceType and referenceId omitted", () => {
+    expect(() => postVoucherInputSchema.parse(baseInput())).not.toThrow();
+  });
+
+  it("accepts referenceType and referenceId provided together", () => {
+    expect(() =>
+      postVoucherInputSchema.parse(baseInput({ referenceType: "SALES_INVOICE", referenceId: REFERENCE_ID }))
+    ).not.toThrow();
+  });
+
+  it("rejects referenceType without referenceId", () => {
+    expect(() => postVoucherInputSchema.parse(baseInput({ referenceType: "SALES_INVOICE" }))).toThrow();
+  });
+
+  it("rejects referenceId without referenceType", () => {
+    expect(() => postVoucherInputSchema.parse(baseInput({ referenceId: REFERENCE_ID }))).toThrow();
+  });
 });
