@@ -20,6 +20,7 @@ import {
 } from "@/modules/margin-profiles/actions/margin-profile-actions";
 import { MarginProfileModeBadge } from "@/modules/margin-profiles/components/margin-profile-mode-badge";
 import { MarginProfileStatusBadge } from "@/modules/margin-profiles/components/margin-profile-status-badge";
+import { MARGIN_PROFILE_TIER_FIELDS } from "@/modules/margin-profiles/validation/margin-profile-schema";
 import type { MarginProfile } from "@/types/margin-profile";
 
 interface MarginProfileTableProps {
@@ -78,10 +79,11 @@ export function MarginProfileTable({
         <TableRow>
           <TableHead>Name</TableHead>
           <TableHead>Mode</TableHead>
-          <TableHead className="text-right">Retail %</TableHead>
-          <TableHead className="text-right">Wholesale %</TableHead>
-          <TableHead className="text-right">Dealer %</TableHead>
-          <TableHead className="text-right">Distributor %</TableHead>
+          {MARGIN_PROFILE_TIER_FIELDS.map(({ name, label }) => (
+            <TableHead key={name} className="text-right">
+              {label}
+            </TableHead>
+          ))}
           <TableHead>Status</TableHead>
           <TableHead className="text-right">Actions</TableHead>
         </TableRow>
@@ -95,18 +97,11 @@ export function MarginProfileTable({
             <TableCell>
               <MarginProfileModeBadge calculationMode={marginProfile.calculationMode} />
             </TableCell>
-            <TableCell className="text-right font-financial">
-              {marginProfile.retailPercent.toFixed(2)}
-            </TableCell>
-            <TableCell className="text-right font-financial">
-              {marginProfile.wholesalePercent.toFixed(2)}
-            </TableCell>
-            <TableCell className="text-right font-financial">
-              {marginProfile.dealerPercent.toFixed(2)}
-            </TableCell>
-            <TableCell className="text-right font-financial">
-              {marginProfile.distributorPercent.toFixed(2)}
-            </TableCell>
+            {MARGIN_PROFILE_TIER_FIELDS.map(({ name }) => (
+              <TableCell key={name} className="text-right font-financial">
+                {marginProfile[name].toFixed(2)}
+              </TableCell>
+            ))}
             <TableCell>
               <MarginProfileStatusBadge isActive={marginProfile.isActive} />
             </TableCell>

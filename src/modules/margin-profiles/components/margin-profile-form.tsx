@@ -27,19 +27,18 @@ import {
   createMarginProfileAction,
   updateMarginProfileAction,
 } from "@/modules/margin-profiles/actions/margin-profile-actions";
+import { PRICE_CALCULATION_MODE_LABELS } from "@/modules/margin-profiles/components/margin-profile-mode-badge";
 import {
   createMarginProfileSchema,
+  MARGIN_MAX_PERCENT,
+  MARGIN_PROFILE_TIER_FIELDS,
+  MARKUP_MAX_PERCENT,
   PRICE_CALCULATION_MODES,
   type CreateMarginProfileInput,
 } from "@/modules/margin-profiles/validation/margin-profile-schema";
 import type { MarginProfile } from "@/types/margin-profile";
 
 const LIST_PATH = "/masters/margin-profiles";
-
-const MODE_LABELS: Record<(typeof PRICE_CALCULATION_MODES)[number], string> = {
-  MARGIN: "Margin",
-  MARKUP: "Markup",
-};
 
 // Display text only, no calculation performed here or anywhere in this
 // module — applying the formula is exclusively the Pricing Engine's (#28)
@@ -48,13 +47,6 @@ const MODE_EXPLANATIONS: Record<(typeof PRICE_CALCULATION_MODES)[number], string
   MARGIN: "Margin: price = cost ÷ (1 − % / 100)",
   MARKUP: "Markup: price = cost × (1 + % / 100)",
 };
-
-const TIER_FIELDS = [
-  { name: "retailPercent", label: "Retail %" },
-  { name: "wholesalePercent", label: "Wholesale %" },
-  { name: "dealerPercent", label: "Dealer %" },
-  { name: "distributorPercent", label: "Distributor %" },
-] as const;
 
 interface MarginProfileFormProps {
   /** When present the form saves via update; otherwise it creates. Create and
@@ -88,7 +80,7 @@ export function MarginProfileForm({ marginProfile }: MarginProfileFormProps) {
   const [calculationMode, setCalculationMode] = React.useState<
     CreateMarginProfileInput["calculationMode"]
   >(marginProfile?.calculationMode ?? "MARGIN");
-  const maxPercent = calculationMode === "MARGIN" ? 99.99 : 999.99;
+  const maxPercent = calculationMode === "MARGIN" ? MARGIN_MAX_PERCENT : MARKUP_MAX_PERCENT;
 
   async function handleSubmit(data: CreateMarginProfileInput) {
     setIsSubmitting(true);
@@ -154,7 +146,7 @@ export function MarginProfileForm({ marginProfile }: MarginProfileFormProps) {
                 <SelectContent>
                   {PRICE_CALCULATION_MODES.map((option) => (
                     <SelectItem key={option} value={option}>
-                      {MODE_LABELS[option]}
+                      {PRICE_CALCULATION_MODE_LABELS[option]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -168,7 +160,7 @@ export function MarginProfileForm({ marginProfile }: MarginProfileFormProps) {
         />
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {TIER_FIELDS.map(({ name, label }) => (
+          {MARGIN_PROFILE_TIER_FIELDS.map(({ name, label }) => (
             <FormField
               key={name}
               control={form.control}
