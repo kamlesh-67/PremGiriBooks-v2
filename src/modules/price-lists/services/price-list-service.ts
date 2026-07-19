@@ -90,6 +90,17 @@ export const priceListService = {
   // A list belonging to a different company must resolve identically to
   // "not found" — never distinguish "exists but isn't yours" from "doesn't
   // exist," mirroring margin-profile-service.ts's identical rule.
+  /**
+   * Active lists only — the lookup the Customer form's Price List picker
+   * (30-pricing-engine.md) consumes, mirroring
+   * marginProfileService.listSelectableMarginProfiles.
+   */
+  async listSelectablePriceLists(): Promise<PriceListWithItemCount[]> {
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "masters", "view");
+    return priceListRepository.findMany(user.companyId, { status: "active" });
+  },
+
   async getPriceList(id: string): Promise<PriceListDetail | null> {
     const user = await getCurrentCompanyUser();
     await assertPermission(user, "masters", "view");

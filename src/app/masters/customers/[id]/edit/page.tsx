@@ -5,6 +5,8 @@ import { getCurrentCompanyUser } from "@/lib/current-user";
 import { hasPermission, isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { CustomerEditForm } from "@/modules/customers/components/customer-edit-form";
 import { customerService } from "@/modules/customers/services/customer-service";
+import { priceListService } from "@/modules/price-lists/services/price-list-service";
+import type { PriceListMasterOption } from "@/types/price-list";
 
 interface EditCustomerPageProps {
   params: Promise<{ id: string }>;
@@ -24,9 +26,10 @@ export default async function EditCustomerPage({ params }: EditCustomerPageProps
     notFound();
   }
 
-  const [isAdmin, activeGroups] = await Promise.all([
+  const [isAdmin, activeGroups, activePriceLists] = await Promise.all([
     isCurrentUserCompanyAdmin(),
     customerService.listSelectableLedgerGroupsForCustomer(),
+    priceListService.listSelectablePriceLists(),
   ]);
 
   // Merge the customer's current group into the picker even if since
@@ -35,6 +38,14 @@ export default async function EditCustomerPage({ params }: EditCustomerPageProps
   const groups = activeGroups.some((group) => group.id === customer.ledger.ledgerGroupId)
     ? activeGroups
     : [...activeGroups, customer.ledger.ledgerGroup];
+
+  // Same merge for the assigned Price List — a since-deactivated assignment
+  // stays visible and re-selectable on the edit form (30-pricing-engine.md).
+  const currentPriceList = customer.priceList;
+  const priceLists: PriceListMasterOption[] =
+    currentPriceList && !activePriceLists.some((list) => list.id === currentPriceList.id)
+      ? [...activePriceLists, currentPriceList]
+      : activePriceLists;
 
   return (
     <AppShell isAdmin={isAdmin}>
@@ -48,7 +59,7 @@ export default async function EditCustomerPage({ params }: EditCustomerPageProps
           </p>
         </div>
 
-        <CustomerEditForm customer={customer} groups={groups} />
+        <CustomerEditForm customer={customer} groups={groups} priceLists={priceLists} />
       </div>
     </AppShell>
   );

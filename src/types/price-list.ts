@@ -88,3 +88,13 @@ export interface EffectivePriceListCriteria {
 export interface EffectivePriceList extends PriceList {
   items: PriceListItem[];
 }
+
+/** The slice of a Price List the Customer form's picker needs — narrow
+ * read-model so nothing here changes when the Price Lists module evolves,
+ * following ProductMasterOption's convention. `isActive` lets a customer's
+ * since-deactivated assigned list stay visible, labeled "(Inactive)". */
+export interface PriceListMasterOption {
+  id: string;
+  name: string;
+  isActive: boolean;
+}

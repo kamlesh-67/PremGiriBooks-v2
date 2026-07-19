@@ -3,10 +3,12 @@
 import { CustomerForm } from "@/modules/customers/components/customer-form";
 import type { CustomerWithLedger } from "@/types/customer";
 import type { LedgerGroup } from "@/types/ledger-group";
+import type { PriceListMasterOption } from "@/types/price-list";
 
 interface CustomerEditFormProps {
   customer: CustomerWithLedger;
   groups: LedgerGroup[];
+  priceLists: PriceListMasterOption[];
 }
 
 /**
@@ -15,6 +17,6 @@ interface CustomerEditFormProps {
  * mandatory; it exists as the spec's named edit seam for the day edit
  * diverges (the product-edit-form.tsx convention).
  */
-export function CustomerEditForm({ customer, groups }: CustomerEditFormProps) {
-  return <CustomerForm customer={customer} groups={groups} />;
+export function CustomerEditForm({ customer, groups, priceLists }: CustomerEditFormProps) {
+  return <CustomerForm customer={customer} groups={groups} priceLists={priceLists} />;
 }
