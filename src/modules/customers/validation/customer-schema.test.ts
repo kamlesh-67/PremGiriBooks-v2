@@ -167,10 +167,16 @@ describe("createCustomerSchema", () => {
     expect(createCustomerSchema.safeParse({ ...VALID_INPUT, creditDays: 365 }).success).toBe(true);
   });
 
-  it("rejects a negative opening balance and an unknown balance type", () => {
+  it("rejects a negative opening balance, more than 2 decimal places, and an unknown balance type", () => {
     expect(createCustomerSchema.safeParse({ ...VALID_INPUT, openingBalance: -1 }).success).toBe(
       false
     );
+    expect(
+      createCustomerSchema.safeParse({ ...VALID_INPUT, openingBalance: 10.999 }).success
+    ).toBe(false);
+    expect(
+      createCustomerSchema.safeParse({ ...VALID_INPUT, openingBalance: 18.15 }).success
+    ).toBe(true);
     expect(
       createCustomerSchema.safeParse({ ...VALID_INPUT, openingBalanceType: "BOTH" }).success
     ).toBe(false);

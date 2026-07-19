@@ -38,6 +38,7 @@ export function CustomerOpeningBalanceSection({ control }: CustomerOpeningBalanc
                   min={0}
                   step="0.01"
                   {...field}
+                  value={field.value ?? ""}
                   onChange={(event) => {
                     const value = event.target.valueAsNumber;
                     field.onChange(Number.isNaN(value) ? undefined : value);

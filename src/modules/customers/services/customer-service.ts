@@ -209,6 +209,18 @@ export const customerService = {
 
     try {
       return await runInTransaction(async (tx) => {
+        // Re-checked inside the transaction so a concurrent group
+        // deactivation between the read above and this write is caught —
+        // the same freshGroup guard as createCustomer's.
+        if (groupChanged) {
+          const freshGroup = await tx.ledgerGroup.findUnique({
+            where: { id: data.ledgerGroupId },
+          });
+          if (!freshGroup?.isActive) {
+            throw new AppError("Cannot assign a customer to an inactive ledger group.");
+          }
+        }
+
         const ledger = await ledgerRepository.update(
           existing.ledgerId,
           user.companyId,

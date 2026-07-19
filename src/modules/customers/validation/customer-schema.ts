@@ -72,7 +72,10 @@ const DISPLAY_NAME_SCHEMA = z
 const OPENING_BALANCE_SCHEMA = z
   .number()
   .min(0, "Opening balance must be zero or greater")
-  .max(MAX_AMOUNT, "Opening balance is too large");
+  .max(MAX_AMOUNT, "Opening balance is too large")
+  .refine(hasAtMostTwoDecimals, {
+    message: "Opening balance can have at most 2 decimal places",
+  });
 
 const CREDIT_LIMIT_SCHEMA = z
   .number("Credit limit must be a number")
