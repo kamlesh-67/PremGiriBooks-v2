@@ -155,6 +155,18 @@ describe("createCustomerSchema", () => {
     expect(createCustomerSchema.safeParse({ ...VALID_INPUT, creditLimit: 0 }).success).toBe(true);
   });
 
+  it("accepts an omitted priceListId and rejects a malformed one", () => {
+    expect(createCustomerSchema.safeParse(VALID_INPUT).success).toBe(true);
+    expect(
+      createCustomerSchema.safeParse({ ...VALID_INPUT, priceListId: "not-a-uuid" }).success
+    ).toBe(false);
+    const result = createCustomerSchema.parse({
+      ...VALID_INPUT,
+      priceListId: "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    });
+    expect(result.priceListId).toBe("3fa85f64-5717-4562-b3fc-2c963f66afa6");
+  });
+
   it("bounds credit days to whole numbers between 0 and 365", () => {
     expect(createCustomerSchema.safeParse({ ...VALID_INPUT, creditDays: -1 }).success).toBe(false);
     expect(createCustomerSchema.safeParse({ ...VALID_INPUT, creditDays: 30.5 }).success).toBe(

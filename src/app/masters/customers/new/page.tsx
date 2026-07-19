@@ -5,6 +5,7 @@ import { getCurrentCompanyUser } from "@/lib/current-user";
 import { hasPermission, isCurrentUserCompanyAdmin } from "@/lib/permissions";
 import { CustomerForm } from "@/modules/customers/components/customer-form";
 import { customerService } from "@/modules/customers/services/customer-service";
+import { priceListService } from "@/modules/price-lists/services/price-list-service";
 
 export default async function NewCustomerPage() {
   const user = await getCurrentCompanyUser();
@@ -15,9 +16,10 @@ export default async function NewCustomerPage() {
 
   // Active "Sundry Debtors"-subtree groups — a single group (the common
   // case: no custom sub-groups) renders as plain text instead of a picker.
-  const [isAdmin, groups] = await Promise.all([
+  const [isAdmin, groups, priceLists] = await Promise.all([
     isCurrentUserCompanyAdmin(),
     customerService.listSelectableLedgerGroupsForCustomer(),
+    priceListService.listSelectablePriceLists(),
   ]);
 
   return (
@@ -31,7 +33,7 @@ export default async function NewCustomerPage() {
           </p>
         </div>
 
-        <CustomerForm groups={groups} />
+        <CustomerForm groups={groups} priceLists={priceLists} />
       </div>
     </AppShell>
   );

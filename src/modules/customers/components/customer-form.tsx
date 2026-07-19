@@ -24,6 +24,7 @@ import {
 } from "@/modules/customers/validation/customer-schema";
 import type { CustomerWithLedger } from "@/types/customer";
 import type { LedgerGroup } from "@/types/ledger-group";
+import type { PriceListMasterOption } from "@/types/price-list";
 
 const LIST_PATH = "/masters/customers";
 
@@ -35,9 +36,12 @@ interface CustomerFormProps {
   /** Active "Sundry Debtors"-subtree groups (plus, on edit, the customer's
    * current group even if since deactivated). */
   groups: LedgerGroup[];
+  /** Active price lists (plus, on edit, the customer's current assignment
+   * even if since deactivated) — 30-pricing-engine.md. */
+  priceLists: PriceListMasterOption[];
 }
 
-export function CustomerForm({ customer, groups }: CustomerFormProps) {
+export function CustomerForm({ customer, groups, priceLists }: CustomerFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const isEdit = customer !== undefined;
@@ -64,6 +68,7 @@ export function CustomerForm({ customer, groups }: CustomerFormProps) {
       pinCode: customer?.pinCode ?? "",
       creditLimit: customer?.creditLimit ?? undefined,
       creditDays: customer?.creditDays ?? undefined,
+      priceListId: customer?.priceListId ?? undefined,
       // Debit is the debtor default; Credit stays selectable (advance
       // received) — 26-customer-management.md.
       openingBalance: customer?.ledger.openingBalance ?? 0,
@@ -115,7 +120,7 @@ export function CustomerForm({ customer, groups }: CustomerFormProps) {
         <CustomerContactSection control={form.control} />
         <CustomerTaxSection control={form.control} />
         <CustomerAddressSection control={form.control} />
-        <CustomerCreditSection control={form.control} />
+        <CustomerCreditSection control={form.control} priceLists={priceLists} />
         <CustomerOpeningBalanceSection control={form.control} />
 
         <div className="flex justify-end gap-2">

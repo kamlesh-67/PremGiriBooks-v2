@@ -63,6 +63,7 @@ function toPersistData(data: CreateCustomerInput): CustomerPersistData {
     pinCode: data.pinCode ?? null,
     creditLimit: data.creditLimit ?? null,
     creditDays: data.creditDays ?? null,
+    priceListId: data.priceListId ?? null,
   };
 }
 

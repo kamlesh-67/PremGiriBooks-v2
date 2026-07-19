@@ -1,30 +1,57 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const findManyMock = vi.fn();
+// vi.mock's factory below is hoisted above this module's own top-level code,
+// so the mocks it closes over must come from vi.hoisted() rather than plain
+// `const` — relying on Vitest's incidental import-deferral order instead
+// would be a hidden coupling to an implementation detail, not a contract.
+const {
+  findManyMock,
+  txPriceListFindUniqueMock,
+  txPriceListUpdateMock,
+  txProductFindUniqueMock,
+  txItemCreateMock,
+  txItemUpdateMock,
+  txItemFindUniqueMock,
+  txItemDeleteMock,
+  txMock,
+} = vi.hoisted(() => {
+  const findManyMock = vi.fn();
+  const txPriceListFindUniqueMock = vi.fn();
+  const txPriceListUpdateMock = vi.fn();
+  const txProductFindUniqueMock = vi.fn();
+  const txItemCreateMock = vi.fn();
+  const txItemUpdateMock = vi.fn();
+  const txItemFindUniqueMock = vi.fn();
+  const txItemDeleteMock = vi.fn();
 
-const txPriceListFindUniqueMock = vi.fn();
-const txPriceListUpdateMock = vi.fn();
-const txProductFindUniqueMock = vi.fn();
-const txItemCreateMock = vi.fn();
-const txItemUpdateMock = vi.fn();
-const txItemFindUniqueMock = vi.fn();
-const txItemDeleteMock = vi.fn();
+  const txMock = {
+    priceList: {
+      findUnique: (...args: unknown[]) => txPriceListFindUniqueMock(...args),
+      update: (...args: unknown[]) => txPriceListUpdateMock(...args),
+    },
+    product: {
+      findUnique: (...args: unknown[]) => txProductFindUniqueMock(...args),
+    },
+    priceListItem: {
+      create: (...args: unknown[]) => txItemCreateMock(...args),
+      update: (...args: unknown[]) => txItemUpdateMock(...args),
+      findUnique: (...args: unknown[]) => txItemFindUniqueMock(...args),
+      delete: (...args: unknown[]) => txItemDeleteMock(...args),
+    },
+  };
 
-const txMock = {
-  priceList: {
-    findUnique: (...args: unknown[]) => txPriceListFindUniqueMock(...args),
-    update: (...args: unknown[]) => txPriceListUpdateMock(...args),
-  },
-  product: {
-    findUnique: (...args: unknown[]) => txProductFindUniqueMock(...args),
-  },
-  priceListItem: {
-    create: (...args: unknown[]) => txItemCreateMock(...args),
-    update: (...args: unknown[]) => txItemUpdateMock(...args),
-    findUnique: (...args: unknown[]) => txItemFindUniqueMock(...args),
-    delete: (...args: unknown[]) => txItemDeleteMock(...args),
-  },
-};
+  return {
+    findManyMock,
+    txPriceListFindUniqueMock,
+    txPriceListUpdateMock,
+    txProductFindUniqueMock,
+    txItemCreateMock,
+    txItemUpdateMock,
+    txItemFindUniqueMock,
+    txItemDeleteMock,
+    txMock,
+  };
+});
 
 // Mirrors src/lib/transaction.test.ts's convention — mock the Prisma client
 // boundary rather than hitting a real database from a unit test.

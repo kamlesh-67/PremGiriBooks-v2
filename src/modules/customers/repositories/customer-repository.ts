@@ -4,8 +4,10 @@ import {
   type CustomerType,
   type Ledger as PrismaLedger,
   type LedgerGroup,
+  type PriceList as PrismaPriceList,
 } from "@prisma/client";
 
+import { AppError } from "@/lib/app-error";
 import { prisma } from "@/lib/prisma";
 import { isRecordNotFoundError } from "@/lib/prisma-errors";
 import { toLedgerWithGroup } from "@/modules/ledgers/repositories/ledger-repository";
@@ -16,6 +18,7 @@ import type {
   CustomerWithLedger,
   DeactivateCustomerResult,
 } from "@/types/customer";
+import type { PriceListMasterOption } from "@/types/price-list";
 
 type PrismaClientOrTransaction = typeof prisma | Prisma.TransactionClient;
 
@@ -36,9 +39,15 @@ export interface CustomerPersistData {
   pinCode: string | null;
   creditLimit: number | null;
   creditDays: number | null;
+  priceListId: string | null;
 }
 
-const LEDGER_WITH_GROUP_INCLUDE = { ledger: { include: { ledgerGroup: true } } } as const;
+const PRICE_LIST_OPTION_SELECT = { id: true, name: true, isActive: true } as const;
+
+const CUSTOMER_INCLUDE = {
+  ledger: { include: { ledgerGroup: true } },
+  priceList: { select: PRICE_LIST_OPTION_SELECT },
+} as const;
 
 // `creditLimit` is a Prisma `Decimal` at the database boundary — normalized
 // to a plain `number` here, before it can cross the Server Component /
@@ -50,9 +59,50 @@ function toCustomer(raw: PrismaCustomer): Customer {
 }
 
 function toCustomerWithLedger(
-  raw: PrismaCustomer & { ledger: PrismaLedger & { ledgerGroup: LedgerGroup } }
+  raw: PrismaCustomer & {
+    ledger: PrismaLedger & { ledgerGroup: LedgerGroup };
+    priceList: Pick<PrismaPriceList, "id" | "name" | "isActive"> | null;
+  }
 ): CustomerWithLedger {
-  return { ...toCustomer(raw), ledger: toLedgerWithGroup(raw.ledger) };
+  return { ...toCustomer(raw), ledger: toLedgerWithGroup(raw.ledger), priceList: raw.priceList };
+}
+
+/** `create()`/`update()` return this — the plain Customer plus its assigned
+ * Price List's identity, so customerService can attach the (separately
+ * created/looked-up) Ledger without losing the priceList join. */
+export interface CustomerWithPriceList extends Customer {
+  priceList: PriceListMasterOption | null;
+}
+
+function toCustomerWithPriceList(
+  raw: PrismaCustomer & { priceList: Pick<PrismaPriceList, "id" | "name" | "isActive"> | null }
+): CustomerWithPriceList {
+  return { ...toCustomer(raw), priceList: raw.priceList };
+}
+
+// The referenced Price List must belong to the same company and be active
+// at assignment time (30-pricing-engine.md's Business Rules) — server-
+// verified, never trusted from the client (product-repository.ts's
+// verifyReferences/assertAssignable convention, applied to the one
+// reference Customer carries). Only a newly assigned or changed id is
+// re-verified; an unchanged, since-deactivated assignment stays untouched.
+async function verifyPriceListReference(
+  client: PrismaClientOrTransaction,
+  companyId: string,
+  priceListId: string | null,
+  existingPriceListId: string | null
+): Promise<void> {
+  if (!priceListId || priceListId === existingPriceListId) {
+    return;
+  }
+
+  const priceList = await client.priceList.findUnique({ where: { id: priceListId } });
+  if (!priceList || priceList.companyId !== companyId) {
+    throw new AppError("Selected price list was not found.");
+  }
+  if (!priceList.isActive) {
+    throw new AppError("Selected price list is inactive.");
+  }
 }
 
 function buildWhere(companyId: string, filters: CustomerListFilters): Prisma.CustomerWhereInput {
@@ -102,7 +152,7 @@ async function setCustomerActive(
   const updated = await client.customer.update({
     where: { id },
     data: { isActive },
-    include: LEDGER_WITH_GROUP_INCLUDE,
+    include: CUSTOMER_INCLUDE,
   });
 
   return { status: "ok", customer: toCustomerWithLedger(updated) };
@@ -115,7 +165,7 @@ export const customerRepository = {
   ): Promise<CustomerWithLedger[]> {
     const rows = await prisma.customer.findMany({
       where: buildWhere(companyId, filters),
-      include: LEDGER_WITH_GROUP_INCLUDE,
+      include: CUSTOMER_INCLUDE,
       orderBy: { ledger: { name: "asc" } },
     });
     return rows.map(toCustomerWithLedger);
@@ -124,7 +174,7 @@ export const customerRepository = {
   async findById(id: string): Promise<CustomerWithLedger | null> {
     const row = await prisma.customer.findUnique({
       where: { id },
-      include: LEDGER_WITH_GROUP_INCLUDE,
+      include: CUSTOMER_INCLUDE,
     });
     return row ? toCustomerWithLedger(row) : null;
   },
@@ -138,9 +188,13 @@ export const customerRepository = {
     ledgerId: string,
     data: CustomerPersistData,
     client: PrismaClientOrTransaction
-  ): Promise<Customer> {
-    const created = await client.customer.create({ data: { ...data, companyId, ledgerId } });
-    return toCustomer(created);
+  ): Promise<CustomerWithPriceList> {
+    await verifyPriceListReference(client, companyId, data.priceListId, null);
+    const created = await client.customer.create({
+      data: { ...data, companyId, ledgerId },
+      include: { priceList: { select: PRICE_LIST_OPTION_SELECT } },
+    });
+    return toCustomerWithPriceList(created);
   },
 
   // Company-scoping is checked in the same transaction as the write — no
@@ -152,15 +206,21 @@ export const customerRepository = {
     companyId: string,
     data: CustomerPersistData,
     client: PrismaClientOrTransaction
-  ): Promise<Customer | null> {
+  ): Promise<CustomerWithPriceList | null> {
     const existing = await client.customer.findUnique({ where: { id } });
     if (!existing || existing.companyId !== companyId) {
       return null;
     }
 
+    await verifyPriceListReference(client, companyId, data.priceListId, existing.priceListId);
+
     try {
-      const updated = await client.customer.update({ where: { id }, data });
-      return toCustomer(updated);
+      const updated = await client.customer.update({
+        where: { id },
+        data,
+        include: { priceList: { select: PRICE_LIST_OPTION_SELECT } },
+      });
+      return toCustomerWithPriceList(updated);
     } catch (error) {
       if (isRecordNotFoundError(error)) {
         return null;

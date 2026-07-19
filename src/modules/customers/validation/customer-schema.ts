@@ -91,6 +91,11 @@ const CREDIT_DAYS_SCHEMA = z
   .max(MAX_CREDIT_DAYS, `Credit days must be at most ${MAX_CREDIT_DAYS}`)
   .optional();
 
+// The server re-verifies company scope + active status (the Pricing Engine's
+// `Customer.priceListId` assignment, 30-pricing-engine.md) — this only guards
+// the shape, mirroring product-schema.ts's OPTIONAL_REFERENCE_SCHEMA.
+const PRICE_LIST_ID_SCHEMA = z.uuid("Select a valid price list").optional();
+
 export const createCustomerSchema = z.object({
   displayName: DISPLAY_NAME_SCHEMA,
   // The server re-validates active + "Sundry Debtors or descendant" — this
@@ -112,6 +117,7 @@ export const createCustomerSchema = z.object({
   pinCode: optionalPattern(PIN_CODE_REGEX, "Enter a valid 6-digit PIN code"),
   creditLimit: CREDIT_LIMIT_SCHEMA,
   creditDays: CREDIT_DAYS_SCHEMA,
+  priceListId: PRICE_LIST_ID_SCHEMA,
   openingBalance: OPENING_BALANCE_SCHEMA,
   openingBalanceType: z.enum(BALANCE_TYPES),
   description: optionalText(500, "Description"),
