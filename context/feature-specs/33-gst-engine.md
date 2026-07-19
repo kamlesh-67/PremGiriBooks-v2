@@ -101,7 +101,7 @@ All functions are pure and synchronous. All money math is integer-paise internal
 
   ```text
   {
-    amount: number            // line amount, > 0
+    amount: number            // line amount, > 0, max 2 decimals (paise resolution)
     isInclusive: boolean      // false: amount is taxable value; true: amount includes GST+cess
     ratePercent: number       // total GST rate (0–100, 2 decimals) from the GstRate master
     cessPercent: number       // 0–100, 2 decimals
@@ -115,16 +115,26 @@ All functions are pure and synchronous. All money math is integer-paise internal
   ```
 
   Rules: exclusive → tax = taxable × rate/100; inclusive → taxable = amount / (1 +
-  (rate + cess)/100), back-calculated. Intra: CGST = SGST = tax/2 (each rounded
-  half-up to 2 decimals — the statutory halves of 18% are 9% + 9%; an odd paisa after
-  halving goes to CGST, documented); inter: IGST = full tax. Cess always on the
-  taxable value. Zero rate (exempt/nil) flows through with zeros.
-- `calculateDocument(lines)` → per-rate groups (`ratePercent` → taxable/cgst/sgst/
-  igst/cess sums) + document totals. **Rounding policy: round per line, sum the
-  rounded lines** — document totals are exact sums of line values so a printed invoice
-  always foots; final invoice-total rounding to the rupee (and its round-off ledger
-  entry) is the document's concern, not this engine's (recorded so spec 36 inherits
-  it).
+  (rate + cess)/100), back-calculated. **Intra-state split**: round the *total* GST tax
+  to paise first (half-up), then split the rounded total — SGST = floor(totalTaxPaise
+  / 2), CGST = totalTaxPaise − SGST — so the odd paisa, when the total is odd, lands on
+  CGST and `cgst + sgst === totalTax` holds *exactly* (never round the halves
+  independently: two half-up roundings can exceed the total by a paisa). Inter: IGST =
+  the full rounded tax. Cess always on the taxable value, rounded to paise
+  independently. **Inclusive residual rule**: compute tax and cess from the
+  back-calculated taxable value and round them per the rules above, then set
+  `taxableAmount = amount − totalTax − cess` — the rounding residual (at most a paisa)
+  is absorbed by the taxable value, so the returned components always sum exactly to
+  the supplied inclusive amount and `totalAmount` equals it. Zero rate (exempt/nil)
+  flows through with zeros.
+- `calculateDocument(lines)` → per-rate groups keyed by the **(`ratePercent`,
+  `cessPercent`) pair** (two lines sharing a GST rate but carrying different cess rates
+  are distinct groups — grouping by rate alone would merge their cess totals
+  incorrectly) → taxable/cgst/sgst/igst/cess sums per group + document totals.
+  **Rounding policy: round per line, sum the rounded lines** — document totals are
+  exact sums of line values so a printed invoice always foots; final invoice-total
+  rounding to the rupee (and its round-off ledger entry) is the document's concern, not
+  this engine's (recorded so spec 36 inherits it).
 - `isHsnRequired(codeTypeExpected, hsnCode?)` — small helper documents will use for
   "HSN Code is mandatory where applicable" (applicable = taxed line; threshold-based
   digit rules are a Phase 7 reporting concern).
@@ -137,9 +147,12 @@ values and its own audit trail; forward-noted for spec 36/42.
 
 # Validation
 
-Zod at the engine boundary: amount > 0 finite, percents 0–100 with max 2 decimals
-(`hasAtMostTwoDecimals`), enums, non-empty lines array for aggregation. Invalid state
-codes rejected by `determineSupplyType` (must exist in `GST_STATE_CODES`).
+Zod at the engine boundary: amount > 0, finite, **max 2 decimal places**
+(`hasAtMostTwoDecimals` — money enters at paise resolution to match the integer-paise
+internals and the 2-decimal output contract; sub-paise inputs are rejected, never
+silently rounded), percents 0–100 with max 2 decimals, enums, non-empty lines array for
+aggregation. Invalid state codes rejected by `determineSupplyType` (must exist in
+`GST_STATE_CODES`).
 
 ---
 
@@ -163,12 +176,16 @@ correct, not an omission.)
 Strict TypeScript, no `any`, pure functions only, integer-paise arithmetic, vitest as
 the primary deliverable:
 
-- intra/inter split incl. the odd-paisa halving rule and equal/unequal state codes
-- exclusive and inclusive calculation, incl. inclusive-with-cess back-calculation
-  round-trips (calculate inclusive → re-apply exclusive → original within 1 paisa)
+- intra/inter split incl. the split-the-rounded-total rule (`cgst + sgst === totalTax`
+  pinned for odd-paisa totals) and equal/unequal state codes
+- exclusive and inclusive calculation, incl. the inclusive residual rule (components
+  sum *exactly* to the supplied inclusive amount) and inclusive-with-cess
+  back-calculation
 - the statutory slabs 0, 0.25, 3, 5, 12, 18, 28 (+ cess cases) against hand-computed
   fixtures
-- per-rate document aggregation and the sum-of-rounded-lines policy
+- per-(rate, cess) document aggregation (same rate + different cess stays separate) and
+  the sum-of-rounded-lines policy
+- 3-decimal amounts rejected at the boundary
 - zero-rate and reverse-charge pass-through
 - state-code lookup and rejection matrix
 

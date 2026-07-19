@@ -184,10 +184,12 @@ Decisions
 - `financialYearId` belongs to the company, is **not closed**, and `voucherDate` falls
   inside the FY's inclusive date range (`09-financial-year.md` semantics).
 - `voucherNumber` is generated via the Document Number Engine **inside the same
-  transaction** (its atomic-increment contract, spec 34).
+  transaction** (its atomic-increment contract, spec 34 — which requires its
+  `ensureSequence` step to run *before* the posting transaction opens; `postVoucher`
+  owns that call).
 - **Immutable once posted**: the engine exposes no update API of any kind — no method
   updates a `Voucher` or `VoucherEntry` row except `cancelVoucher`'s status flip.
-- **`cancelVoucher(id)`**: only a `POSTED`, not-already-reversed voucher; creates the
+- **`cancelVoucher(companyId, id)`**: only a `POSTED`, not-already-reversed voucher; creates the
   reversal voucher (same type, same FY — with its own generated number, entries
   mirrored, `reversalOfId` set, narration "Reversal of {number}") and flips the original
   to `CANCELLED`, both in one transaction. Cancelling a reversal voucher is rejected.
@@ -197,8 +199,13 @@ Decisions
   Σ debits − Σ credits` for DEBIT-nature presentation (sign conventions follow the
   ledger group's `accountNature` for reporting; the engine returns raw debit/credit sums
   and a signed net so Reports choose presentation).
-- **Company-scoped**: engine methods take `companyId` from their authorized caller
-  (spec-30 convention) and re-verify every loaded row against it.
+- **Company-scoped**: every engine method takes `companyId` from its authorized caller
+  **as an explicit first parameter** — `postVoucher(companyId, input, tx?)`,
+  `cancelVoucher(companyId, id)`, `getVoucher(companyId, id)`,
+  `listVouchers(companyId, filters)`, and every query in `voucher-queries.ts` — and
+  applies it **in the initial repository lookup/filter** (a cross-company id never
+  loads; it resolves as not-found), in addition to re-verifying every loaded row
+  against it (spec-30 convention).
 
 ---
 

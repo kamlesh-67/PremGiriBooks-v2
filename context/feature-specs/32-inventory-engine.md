@@ -170,18 +170,39 @@ Decisions
   product has any stock transaction, exactly as spec 25 anticipated).
 - Product and warehouse must belong to the caller's company and be **active at movement
   time** (assignment-time rule; historical rows survive later deactivation untouched).
+- **Every movement's `transactionType` constrains its `direction`** (validated wherever
+  movements are accepted): `OPENING_STOCK` → IN only; `PURCHASE` → IN only;
+  `PURCHASE_RETURN` → OUT only; `SALES` → OUT only; `SALES_RETURN` → IN only;
+  `TRANSFER` → IN or OUT, but only as a `transferGroupId` pair written via
+  `transferStock` (a lone TRANSFER row is rejected); `ADJUSTMENT` and
+  `PHYSICAL_VERIFICATION` → IN or OUT freely. Invalid combinations (e.g. PURCHASE +
+  OUT, SALES + IN) are rejected with a friendly error.
 - **OUT movements validate availability**: current stock (product + warehouse) −
   outgoing quantity ≥ 0, unless `allowNegativeStock` is true. This check and the insert
   run inside **one Serializable transaction with bounded P2034 retry** (the
   `SERIALIZABLE_RETRY` recipe from financial-year/warehouse) — two concurrent sales
-  must not both pass a read-then-write availability check. IN movements need no
+  must not both pass a read-then-write availability check. IN-only batches need no
   Serializable isolation.
+- **Batch availability is validated on aggregated demand**: before checking, OUT
+  quantities are summed per (product, warehouse) across the whole batch, and each
+  pair's *total* is validated against current stock — three lines of 4 units each must
+  not individually pass against a stock of 10. IN lines in the same batch are *not*
+  netted against OUT lines (conservative by design — a batch must not depend on its own
+  inflows to cover its outflows).
 - `transferStock` writes the OUT row (source warehouse) and IN row (destination) with
   one `transferGroupId` in the same transaction; source ≠ destination; availability
   validated on the OUT side; `unitCost` null on both.
 - `recordMovements(lines, tx?)` — the batch API documents use (one document = many
   lines, atomically, on the caller's transaction — the spec-31 `tx` pass-through
-  convention, so invoice + voucher + stock post as one transaction).
+  convention, so invoice + voucher + stock post as one transaction). **Isolation
+  contract for the passed `tx`**: the engine cannot upgrade the isolation level of, or
+  retry, a transaction it does not own. When the batch contains any OUT or TRANSFER
+  line, the caller must have opened the outer transaction at **Serializable** isolation
+  and must own the bounded P2034 retry of the *entire* posting transaction (the shared
+  `runInTransaction` + `SERIALIZABLE_RETRY` helpers exist for exactly this; the engine
+  documents the requirement on the API and asserts it where the client exposes the
+  isolation level). Only when no `tx` is supplied does the engine open and retry its
+  own Serializable transaction, as the OUT rule above describes.
 - Quantity > 0 always; decimals limited to the product unit's `decimalPlaces`
   (checked in-transaction against the loaded product+unit, the spec-25
   `minStockLevel` precedent).
@@ -231,8 +252,8 @@ optional. Batch input: non-empty array.
 
 # Security
 
-No permission checks inside the engine — consumers gate (`inventory` module actions for
-#44–#47, `sales`/`purchase` for documents). The one user-facing surface (the
+No permission checks inside the engine — consumers gate (the `inventory` module actions
+for items #44–#47, `sales`/`purchase` for documents). The one user-facing surface (the
 `allowNegativeStock` switch) rides the company-settings form's existing gate. All
 reads/writes company-scoped via caller-supplied `companyId`.
 
@@ -253,8 +274,13 @@ availability-checked writes, transactions for every write, vitest as a primary
 deliverable:
 
 - IN/OUT aggregation math incl. decimal quantities and per-warehouse grouping
+- type/direction matrix (every allowed combination accepted; representative invalid
+  combinations — PURCHASE + OUT, SALES + IN, OPENING_STOCK + OUT, a lone TRANSFER
+  line — rejected)
 - availability matrix (sufficient, exact-zero, insufficient with setting off → rejected,
-  insufficient with setting on → allowed and negative stock reported)
+  insufficient with setting on → allowed and negative stock reported), incl. the batch
+  aggregation case (multiple OUT lines of one product/warehouse whose sum exceeds stock
+  while each line alone would pass)
 - non-TRADING product rejected; inactive/cross-company product/warehouse rejected
 - unit `decimalPlaces` bound honored per product
 - transfer atomicity, source ≠ destination, transferGroupId pairing

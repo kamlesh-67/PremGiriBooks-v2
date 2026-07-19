@@ -114,6 +114,8 @@ Profiles, and Price Lists through their modules' services/repositories.
 
 ```text
 {
+  companyId: string          // required — the authorized caller's tenant scope; every
+                             // loaded row is validated against it (engine convention)
   productId: string          // required
   quantity: number           // required, > 0, honors the product unit's decimalPlaces
   customerId?: string        // a Permanent Customer, when known

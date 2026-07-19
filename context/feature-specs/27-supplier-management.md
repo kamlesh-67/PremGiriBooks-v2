@@ -152,6 +152,11 @@ All of feature-spec 26's Business Rules apply with the substitutions above. Expl
   Accounts" (spec 15) and "Sundry Debtors" (spec 26). If the exclusion list is still two
   hardcoded checks by now, refactor it into one shared reserved-groups constant the three
   modules and Ledger Master all read.
+- **Ledgers linked to a `Supplier` row are protected from the generic Ledger Master
+  edit/activate/deactivate paths** exactly as Customer-linked ledgers are (spec 26's
+  detail-row guard, extended to check `supplier` alongside `customer` and
+  `bankAccount`) — changes route only through Supplier Management's paired transaction;
+  unlinked legacy ledgers keep unrestricted generic editing.
 - Pre-existing generic Ledgers under "Sundry Creditors" remain valid plain Ledgers, are
   never suppliers, and get no backfill/conversion flow — check the dev database and record
   findings in `progress-tracker.md`, exactly as feature-spec 26 did for "Sundry Debtors".

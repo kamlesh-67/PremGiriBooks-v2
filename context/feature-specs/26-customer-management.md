@@ -195,6 +195,18 @@ the Customer Architecture — do *not* seed a placeholder customer for it).
   Debtors" and all of its descendants** from its Ledger Group Selector, exactly as it
   already excludes "Bank Accounts" (`14-ledger-master.md`). From this feature onward, a
   Ledger under "Sundry Debtors" may only be created through Customer Management.
+- **Ledgers linked to a `Customer` row are also protected from the generic Ledger
+  Master *edit/activate/deactivate* paths.** The generic Ledger edit screen/service and
+  the generic status actions must reject (treat as not-editable) any Ledger that has a
+  `customer` detail row — its name, description, opening balance, group, and active
+  status change only through Customer Management's combined form, inside the paired
+  transaction. Without this, a generic deactivate of just the Ledger half would break
+  the deactivate-both-together invariant below. During implementation, check whether
+  `bankAccount`-linked Ledgers already carry the equivalent guard (spec 15 states the
+  paired invariant but never made the generic-edit exclusion explicit) — if missing,
+  extend the same detail-row check to them in this task and record the finding in
+  `progress-tracker.md`. Unlinked ledgers (including the pre-existing generic rows
+  covered next) keep unrestricted generic editing.
 - **Pre-existing generic Ledgers under "Sundry Debtors" (created via the generic screen
   before this feature) remain valid, untouched Ledgers — they are not customers.** They
   keep working as plain ledgers (editable via Ledger Master as before — the generic *edit*

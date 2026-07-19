@@ -164,12 +164,12 @@ forward-note migration:
 | 31        | GST Engine             | `context/feature-specs/33-gst-engine.md`               |
 | 32        | Document Number Engine | `context/feature-specs/34-document-number-engine.md`   |
 
-| #   | Feature                | Depends On                        | Status |
-| --- | ---------------------- | --------------------------------- | ------ |
-| 29  | Voucher Engine         | Ledger Master                     | ⬜     |
-| 30  | Inventory Engine       | Products + Warehouse              | ⬜     |
-| 31  | GST Engine             | GST Rates + HSN                   | ⬜     |
-| 32  | Document Number Engine | Company + Financial Year + Branch | ⬜     |
+| #   | Feature                | Depends On                                          | Status |
+| --- | ---------------------- | --------------------------------------------------- | ------ |
+| 29  | Voucher Engine         | Ledger Master                                       | ⬜     |
+| 30  | Inventory Engine       | Products + Warehouse                                | ⬜     |
+| 31  | GST Engine             | GST Rates + HSN                                     | ⬜     |
+| 32  | Document Number Engine | Company + Financial Year (branch dimension deferred — see spec 34) | ⬜     |
 
 ---
 

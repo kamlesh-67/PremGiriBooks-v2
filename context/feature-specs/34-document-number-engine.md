@@ -5,9 +5,9 @@
 > **Shared ERP Engines** item **#32 Document Number Engine**. The tracker lists it last
 > in the group, but **implement it first among the engines**: the Voucher Engine (spec
 > 31) calls it at posting time, and nothing here depends on any other engine. Tracker
-> dependencies "Company + Financial Year + Branch": Company and Financial Year are
-> implemented; the Branch dimension is deliberately excluded (Branch Management, spec
-> 12, remains unimplemented — see Data Model).
+> dependencies: Company + Financial Year (both implemented). The Branch dimension is
+> deliberately excluded — Branch Management (spec 12) remains unimplemented — and the
+> tracker's dependency entry reflects that (see Data Model for the forward-note).
 
 ## Goal
 
@@ -20,9 +20,10 @@ Numbering rules this engine encodes:
 
 - Sequences are **per company, per financial year, per document type** — Indian
   practice (and GST expectation) is that document series restart each financial year.
-- Numbers are **gapless-increasing but not gap-free**: the engine never reuses or
-  decrements a number; a cancelled document leaves a gap (legal — cancellation is
-  recorded, not renumbered). No renumbering API may exist.
+- Numbers are **strictly increasing and never reused**: the engine never decrements or
+  reissues a number. Gaps are legal and unmanaged — a committed-then-cancelled document
+  leaves one (cancellation is recorded, not renumbered), while a rolled-back
+  transaction consumes nothing (see the next invariant). No renumbering API may exist.
 - Generation is **concurrency-safe inside the caller's transaction** — two documents
   posted simultaneously must never receive the same number, and a rolled-back document
   posting rolls its number back with it (the gap then never materializes).
@@ -130,9 +131,10 @@ Decisions
   (multiple "no branch" rows). When branches land and a real requirement for
   branch-wise series exists, a migration adds the dimension deliberately. Recorded
   forward-note; same posture as spec 31.
-- **Lazy row creation**: the first `generateNumber`/settings-read for a (company, FY,
-  type) creates the row with defaults — no bootstrap/TenantBootstrapService change, no
-  backfill for existing companies, no seeding. Default prefix per type from a constant
+- **Lazy row creation**: the first use of a (company, FY, type) creates the row with
+  defaults via `ensureSequence` (see Business Rules — it runs in its own standalone
+  transaction, before any posting transaction) — no bootstrap/TenantBootstrapService
+  change, no backfill for existing companies, no seeding. Default prefix per type from a constant
   map (e.g. `SALES_INVOICE → "INV"`, `QUOTATION → "QTN"`, `PAYMENT_VOUCHER → "PMT"` — 
   full map defined in code, editable per company on the settings screen).
 - **Format**: `{prefix}-{paddedNumber}` (e.g. `INV-0001`; number exceeds padding →
@@ -142,21 +144,39 @@ Decisions
   prefix themselves.
 - `prefix` ≤ 10 chars, `padding` 1–8, and combined `prefix.length + 1 + padding ≤ 16`
   (object-level refine) so every formatted number fits GST's 16-character
-  document-number limit at its configured width.
+  document-number limit at its configured width. **The 16-character guard applies to
+  the configured width only, by explicit choice**: a series that overflows its pad
+  width (number > 10^padding − 1) keeps growing naturally and the engine imposes **no
+  runtime cap, truncation, or failure** — a numbering engine must never refuse to
+  number a legal document. Sizing `padding` to expected annual volume is the
+  operator's job (which is why it is configurable per type); the settings screen may
+  warn when a sequence approaches its configured width, but generation never blocks.
 
 ---
 
 # Business Rules
 
 - **`generateNumber(tx, {companyId, financialYearId, documentType})`** must be called
-  with the caller's open transaction client and is atomic within it: implemented as an
-  upsert-if-missing followed by an atomic `update … { nextNumber: { increment: 1 } }`
-  on the unique triple, reading the pre-increment value from the update's returned row
-  (Prisma `update` returns the post-update row — compute the assigned number as
-  `nextNumber − 1`). A concurrent first-use race on row creation surfaces as `P2002` —
-  catch and fall through to the update path (bounded retry). This is exactly the
-  atomicity the Voucher Engine's "no duplicate numbers under concurrency" success
-  criterion exercises.
+  with the caller's open transaction client and is atomic within it. Two-step design,
+  split so no error path can poison the caller's transaction:
+  1. **`ensureSequence(companyId, financialYearId, documentType)` runs *outside* and
+     *before* the posting transaction**, in its own short standalone transaction: an
+     idempotent create-if-missing of the sequence row with the type's defaults. A
+     concurrent first-use race surfaces as `P2002` there — caught and resolved by
+     re-reading, bounded retry — harmlessly, because nothing else shares that
+     transaction. This split exists because Postgres aborts the entire open
+     transaction on any statement error: catching `P2002` and "continuing" inside the
+     caller's interactive posting transaction is **not possible without savepoints and
+     must not be attempted**. Callers ensure the sequence, then open the posting
+     transaction.
+  2. Inside the caller's transaction, `generateNumber` performs **only** the atomic
+     `update … { nextNumber: { increment: 1 } }` on the unique triple, computing the
+     assigned number from the returned row (`nextNumber − 1`). Concurrent increments
+     serialize on the row lock with no error path; a missing row here is a contract
+     violation (caller skipped `ensureSequence`) surfaced as a clear error; if the
+     posting transaction later aborts, the increment rolls back with it.
+  This is exactly the atomicity the Voucher Engine's "no duplicate numbers under
+  concurrency" success criterion exercises.
 - Rollback safety: because the increment lives in the caller's transaction, an aborted
   document posting also aborts the increment — numbers are only consumed by committed
   documents.
@@ -165,9 +185,15 @@ Decisions
   rule spec 31 enforces independently).
 - Settings edits (prefix/padding) apply to numbers generated **after** the change;
   already-issued numbers are never rewritten. Changing a prefix mid-year is allowed
-  (the document tables' own uniqueness is on the full stored string; a collision from
-  cycling a prefix back and forth is surfaced by the document's unique constraint —
-  documented, not prevented).
+  and **cannot collide within the sequence**: the numeric suffix is monotonic per
+  (company, FY, type), so two formatted numbers from one sequence always differ in
+  their numeric part regardless of prefix history. Identical formatted strings are
+  possible only *across document types* (two types configured with the same prefix) —
+  legal by design, because **the uniqueness scope is per (company, financial year,
+  document type)**: every document table's unique constraint includes its type
+  dimension (as `Voucher`'s `(companyId, financialYearId, voucherType,
+  voucherNumber)` already does — the standing pattern future document tables follow),
+  never the bare formatted string.
 - `nextNumber` is monotonically increasing: no API decrements, resets, or renumbers.
 - `previewNextNumber` reads without incrementing (form display only — the displayed
   number is advisory; the posted number is whatever generation returns inside the
@@ -182,7 +208,7 @@ Decisions
 Create
 
 ```text
-src/engines/document-number/document-number-engine.ts // generateNumber, previewNextNumber, formatNumber
+src/engines/document-number/document-number-engine.ts // ensureSequence, generateNumber, previewNextNumber, formatNumber
 src/engines/document-number/document-defaults.ts      // per-type default prefix map
 src/engines/document-number/types.ts
 src/modules/document-sequences/repositories/document-sequence-repository.ts
