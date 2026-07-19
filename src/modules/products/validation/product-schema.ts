@@ -99,6 +99,7 @@ export const createProductSchema = z.object({
   hsnCodeId: OPTIONAL_REFERENCE_SCHEMA("HSN/SAC code"),
   gstRateId: OPTIONAL_REFERENCE_SCHEMA("GST rate"),
   defaultWarehouseId: OPTIONAL_REFERENCE_SCHEMA("warehouse"),
+  marginProfileId: OPTIONAL_REFERENCE_SCHEMA("margin profile"),
   mrp: PRICE_SCHEMA("MRP"),
   sellingPrice: PRICE_SCHEMA("Selling price"),
   purchasePrice: PRICE_SCHEMA("Purchase price"),

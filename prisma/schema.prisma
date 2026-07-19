@@ -81,6 +81,7 @@ model Company {
   gstRates       GstRate[]
   warehouses     Warehouse[]
   products       Product[]
+  marginProfiles MarginProfile[]
   customers      Customer[]
   suppliers      Supplier[]
   auditLogs      AuditLog[]
@@ -460,16 +461,16 @@ model HsnCode {
 // notification and nothing depends structurally on any particular row
 // existing, same reasoning as Unit.
 model GstRate {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   companyId   String
-  company     Company  @relation(fields: [companyId], references: [id])
+  company     Company   @relation(fields: [companyId], references: [id])
   name        String
-  ratePercent Decimal  @db.Decimal(5, 2)
-  cessPercent Decimal  @default(0) @db.Decimal(5, 2)
+  ratePercent Decimal   @db.Decimal(5, 2)
+  cessPercent Decimal   @default(0) @db.Decimal(5, 2)
   description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   products    Product[]
 
   @@unique([companyId, name])
@@ -556,33 +557,35 @@ enum ProductType {
 // reasoning as every Inventory Master since Unit. No delete anywhere —
 // Activate/Deactivate only.
 model Product {
-  id                 String      @id @default(uuid())
+  id                 String         @id @default(uuid())
   companyId          String
-  company            Company     @relation(fields: [companyId], references: [id])
+  company            Company        @relation(fields: [companyId], references: [id])
   name               String
   productCode        String
   barcode            String?
-  productType        ProductType @default(TRADING)
+  productType        ProductType    @default(TRADING)
   categoryId         String?
-  category           Category?   @relation(fields: [categoryId], references: [id])
+  category           Category?      @relation(fields: [categoryId], references: [id])
   brandId            String?
-  brand              Brand?      @relation(fields: [brandId], references: [id])
+  brand              Brand?         @relation(fields: [brandId], references: [id])
   unitId             String
-  unit               Unit        @relation(fields: [unitId], references: [id])
+  unit               Unit           @relation(fields: [unitId], references: [id])
   hsnCodeId          String?
-  hsnCode            HsnCode?    @relation(fields: [hsnCodeId], references: [id])
+  hsnCode            HsnCode?       @relation(fields: [hsnCodeId], references: [id])
   gstRateId          String?
-  gstRate            GstRate?    @relation(fields: [gstRateId], references: [id])
+  gstRate            GstRate?       @relation(fields: [gstRateId], references: [id])
   defaultWarehouseId String?
-  defaultWarehouse   Warehouse?  @relation(fields: [defaultWarehouseId], references: [id])
-  mrp                Decimal?    @db.Decimal(14, 2)
-  sellingPrice       Decimal?    @db.Decimal(14, 2)
-  purchasePrice      Decimal?    @db.Decimal(14, 2)
-  minStockLevel      Decimal?    @db.Decimal(14, 4)
+  defaultWarehouse   Warehouse?     @relation(fields: [defaultWarehouseId], references: [id])
+  marginProfileId    String?
+  marginProfile      MarginProfile? @relation(fields: [marginProfileId], references: [id])
+  mrp                Decimal?       @db.Decimal(14, 2)
+  sellingPrice       Decimal?       @db.Decimal(14, 2)
+  purchasePrice      Decimal?       @db.Decimal(14, 2)
+  minStockLevel      Decimal?       @db.Decimal(14, 4)
   description        String?
-  isActive           Boolean     @default(true)
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  isActive           Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 
   @@unique([companyId, name])
   @@unique([companyId, productCode])
@@ -591,6 +594,53 @@ model Product {
   @@index([categoryId])
   @@index([brandId])
   @@index([unitId])
+  @@index([marginProfileId])
+}
+
+// Named, reusable percentage-based pricing rule (28-margin-profiles.md,
+// PRD.md §12) the Pricing Engine (#28) will apply to a product's latest
+// purchase cost to derive tier-wise selling prices. Stores data only — no
+// price is calculated here or anywhere in this module
+// (architecture-context.md Invariant 6, Engine Driven). One percentage per
+// CustomerType tier, all four required — a company pricing every tier
+// identically simply enters the same number four times. calculationMode is
+// stored per profile (not per company) so mixed strategies are possible.
+// Percentages are Decimal(5,2); the MARGIN-mode < 100 bound (the formula
+// divides by 1 − p/100) and the MARKUP-mode ≤ 999.99 bound are enforced in
+// Zod only (mode-dependent superRefine) — no DB CHECK, matching GstRate's
+// convention. No isSystemDefined and no seeding, no rounding configuration,
+// no category/brand-level defaults — all deliberately deferred (YAGNI). No
+// delete anywhere — Activate/Deactivate only, same as every master since
+// Units.
+model MarginProfile {
+  id                 String               @id @default(uuid())
+  companyId          String
+  company            Company              @relation(fields: [companyId], references: [id])
+  name               String
+  calculationMode    PriceCalculationMode @default(MARGIN)
+  retailPercent      Decimal              @db.Decimal(5, 2)
+  wholesalePercent   Decimal              @db.Decimal(5, 2)
+  dealerPercent      Decimal              @db.Decimal(5, 2)
+  distributorPercent Decimal              @db.Decimal(5, 2)
+  description        String?
+  isActive           Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  products Product[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+// The Pricing Engine's (#28) two company-choosable ways to derive a selling
+// price from a product's latest purchase cost (PRD.md §12):
+// MARKUP: sellingPrice = cost × (1 + percent / 100)
+// MARGIN: sellingPrice = cost / (1 − percent / 100)
+// Not implemented here — MarginProfile only stores the choice.
+enum PriceCalculationMode {
+  MARGIN
+  MARKUP
 }
 
 // The pricing tier the Pricing Engine (#28) and Price Lists (#27) will key

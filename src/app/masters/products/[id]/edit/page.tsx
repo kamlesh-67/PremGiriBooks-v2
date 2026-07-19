@@ -7,6 +7,7 @@ import { brandService } from "@/modules/brands/services/brand-service";
 import { categoryService } from "@/modules/categories/services/category-service";
 import { gstRateService } from "@/modules/gst-rates/services/gst-rate-service";
 import { hsnCodeService } from "@/modules/hsn-codes/services/hsn-code-service";
+import { marginProfileService } from "@/modules/margin-profiles/services/margin-profile-service";
 import { ProductEditForm } from "@/modules/products/components/product-edit-form";
 import { buildProductFormOptions } from "@/modules/products/utils/product-form-options";
 import { productService } from "@/modules/products/services/product-service";
@@ -31,22 +32,24 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
     notFound();
   }
 
-  const [isAdmin, categories, brands, units, hsnCodes, gstRates, warehouses] = await Promise.all([
-    isCurrentUserCompanyAdmin(),
-    categoryService.listSelectableCategories(),
-    brandService.listSelectableBrands(),
-    unitService.listSelectableUnits(),
-    hsnCodeService.listSelectableHsnCodes(),
-    gstRateService.listSelectableGstRates(),
-    warehouseService.listSelectableWarehouses(),
-  ]);
+  const [isAdmin, categories, brands, units, hsnCodes, gstRates, warehouses, marginProfiles] =
+    await Promise.all([
+      isCurrentUserCompanyAdmin(),
+      categoryService.listSelectableCategories(),
+      brandService.listSelectableBrands(),
+      unitService.listSelectableUnits(),
+      hsnCodeService.listSelectableHsnCodes(),
+      gstRateService.listSelectableGstRates(),
+      warehouseService.listSelectableWarehouses(),
+      marginProfileService.listSelectableMarginProfiles(),
+    ]);
 
   // Merges the product's current references into the pickers even if since
   // deactivated, so each stored value stays visible and re-selectable
   // (labeled "(Inactive)") — the warehouse edit page's includeBranchId
-  // convention, scaled to six lookups.
+  // convention, scaled to seven lookups.
   const options = buildProductFormOptions(
-    { categories, brands, units, hsnCodes, gstRates, warehouses },
+    { categories, brands, units, hsnCodes, gstRates, warehouses, marginProfiles },
     product
   );
 

@@ -56,6 +56,7 @@ export function ProductForm({ product, options }: ProductFormProps) {
       hsnCodeId: product?.hsnCodeId ?? undefined,
       gstRateId: product?.gstRateId ?? undefined,
       defaultWarehouseId: product?.defaultWarehouseId ?? undefined,
+      marginProfileId: product?.marginProfileId ?? undefined,
       mrp: product?.mrp ?? undefined,
       sellingPrice: product?.sellingPrice ?? undefined,
       purchasePrice: product?.purchasePrice ?? undefined,
@@ -135,7 +136,7 @@ export function ProductForm({ product, options }: ProductFormProps) {
           isService={isService}
         />
 
-        <ProductPricingSection control={form.control} />
+        <ProductPricingSection control={form.control} marginProfiles={options.marginProfiles} />
 
         <ProductStockSection
           control={form.control}

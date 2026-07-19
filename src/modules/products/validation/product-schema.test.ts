@@ -98,6 +98,7 @@ describe("createProductSchema", () => {
       "hsnCodeId",
       "gstRateId",
       "defaultWarehouseId",
+      "marginProfileId",
     ]) {
       expect(
         createProductSchema.safeParse({ ...VALID_INPUT, [field]: "not-a-uuid" }).success

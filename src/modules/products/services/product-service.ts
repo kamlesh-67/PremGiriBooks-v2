@@ -51,6 +51,7 @@ function toPersistData(data: CreateProductInput): ProductPersistData {
     hsnCodeId: data.hsnCodeId ?? null,
     gstRateId: data.gstRateId ?? null,
     defaultWarehouseId: data.defaultWarehouseId ?? null,
+    marginProfileId: data.marginProfileId ?? null,
     mrp: data.mrp ?? null,
     sellingPrice: data.sellingPrice ?? null,
     purchasePrice: data.purchasePrice ?? null,
