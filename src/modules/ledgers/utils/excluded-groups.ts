@@ -1,5 +1,7 @@
 import {
   BANK_ACCOUNTS_GROUP_NAME,
+  RESERVED_LEDGER_GROUP_NAMES,
+  SUNDRY_CREDITORS_GROUP_NAME,
   SUNDRY_DEBTORS_GROUP_NAME,
 } from "@/modules/ledger-groups/constants/default-groups";
 import { getGroupSubtreeIds } from "@/modules/ledgers/utils/group-subtree";
@@ -44,4 +46,28 @@ export function getBankAccountsSubtreeIds(groups: LedgerGroup[]): Set<string> {
  */
 export function getSundryDebtorsSubtreeIds(groups: LedgerGroup[]): Set<string> {
   return getGroupSubtreeIds(groups, [SUNDRY_DEBTORS_GROUP_NAME]);
+}
+
+/**
+ * The "Sundry Creditors" mirror of getSundryDebtorsSubtreeIds — per
+ * 27-supplier-management.md, a Ledger under "Sundry Creditors" (or any
+ * descendant) may only be created through Supplier Management, atomically
+ * with its Supplier detail row. Same deliberate fail-open behavior when the
+ * group is absent (see getBankAccountsSubtreeIds above).
+ */
+export function getSundryCreditorsSubtreeIds(groups: LedgerGroup[]): Set<string> {
+  return getGroupSubtreeIds(groups, [SUNDRY_CREDITORS_GROUP_NAME]);
+}
+
+/**
+ * The union of all three reserved subtrees ("Bank Accounts", "Sundry
+ * Debtors", "Sundry Creditors") — what the generic Ledger Master Create
+ * screen excludes from its Group selector, now that a third reserved group
+ * exists (27-supplier-management.md's instruction to consolidate what had
+ * been two separate hardcoded checks into one shared constant/helper).
+ * Individual modules (Bank/Customer/Supplier Management) still use their own
+ * single-group getter above for their own "is this the right subtree" check.
+ */
+export function getReservedLedgerGroupSubtreeIds(groups: LedgerGroup[]): Set<string> {
+  return getGroupSubtreeIds(groups, RESERVED_LEDGER_GROUP_NAMES);
 }

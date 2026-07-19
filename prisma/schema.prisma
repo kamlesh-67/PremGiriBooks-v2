@@ -82,6 +82,7 @@ model Company {
   warehouses     Warehouse[]
   products       Product[]
   customers      Customer[]
+  suppliers      Supplier[]
   auditLogs      AuditLog[]
 
   @@index([companyName])
@@ -286,6 +287,7 @@ model Ledger {
 
   bankAccount BankAccount?
   customer    Customer?
+  supplier    Supplier?
 
   @@unique([companyId, name])
   @@index([companyId])
@@ -644,6 +646,52 @@ model Customer {
   isActive        Boolean      @default(true)
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+
+  @@index([companyId])
+}
+
+// Permanent Supplier master (27-supplier-management.md) — the credit-side
+// mirror of Customer: a strict 1:1 extension of Ledger (ledgerId @unique)
+// under "Sundry Creditors" instead of "Sundry Debtors". The display name,
+// opening balance/type (defaulting to CREDIT for a creditor), description,
+// and active/inactive state live on the Ledger row; Supplier only adds the
+// party fields a generic Ledger has no room for. companyId duplicates
+// ledger.companyId (the same deliberate denormalization as BankAccount/
+// Customer), kept in sync only because the pair is always written together
+// in one transaction, never independently. Two deliberate omissions versus
+// Customer: no supplierType — the RETAIL/WHOLESALE/DEALER/DISTRIBUTOR tiers
+// exist for the selling-side Pricing Engine and nothing prices purchases by
+// supplier tier (YAGNI); and no creditLimit — a credit limit is a cap WE
+// impose on a debtor, what a supplier extends to us is their decision, so
+// storing it would be dead data. creditDays (agreed payment terms) is kept —
+// Purchase Invoice (#42) and payables ageing will consume it. No
+// supplierCode (Document Number Engine #32's job); gstin deliberately NOT
+// unique (two branches of one registered vendor may share a GSTIN). No
+// isSystemDefined and no seeding — nothing structurally depends on any
+// supplier existing. No delete anywhere — Activate/Deactivate only.
+model Supplier {
+  id              String   @id @default(uuid())
+  companyId       String
+  company         Company  @relation(fields: [companyId], references: [id])
+  ledgerId        String   @unique
+  ledger          Ledger   @relation(fields: [ledgerId], references: [id])
+  contactPerson   String?
+  mobileNumber    String?
+  alternateMobile String?
+  email           String?
+  gstin           String?
+  pan             String?
+  addressLine1    String?
+  addressLine2    String?
+  city            String?
+  state           String?
+  district        String?
+  country         String   @default("India")
+  pinCode         String?
+  creditDays      Int?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([companyId])
 }

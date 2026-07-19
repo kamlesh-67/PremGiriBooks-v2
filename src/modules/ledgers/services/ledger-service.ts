@@ -10,6 +10,8 @@ import {
 } from "@/modules/ledgers/repositories/ledger-repository";
 import {
   getBankAccountsSubtreeIds,
+  getReservedLedgerGroupSubtreeIds,
+  getSundryCreditorsSubtreeIds,
   getSundryDebtorsSubtreeIds,
 } from "@/modules/ledgers/utils/excluded-groups";
 import { getExpenseHeadGroupIds } from "@/modules/ledgers/utils/expense-head-groups";
@@ -41,10 +43,12 @@ function translatePersistError(error: unknown): never {
 // combined form, inside the paired transaction — a generic edit or status
 // toggle of just the Ledger half would break the change-both-together /
 // deactivate-both-together invariant (26-customer-management.md, which also
-// extended the same guard to 15-bank-management.md's Bank Account ledgers).
+// extended the same guard to 15-bank-management.md's Bank Account ledgers;
+// 27-supplier-management.md extends it again to Supplier ledgers).
 const DETAIL_MANAGED_MESSAGES: Record<LedgerDetailLink, string> = {
   bankAccount: "This ledger belongs to a bank account. Manage it through Bank Management.",
   customer: "This ledger belongs to a customer. Manage it through Customer Management.",
+  supplier: "This ledger belongs to a supplier. Manage it through Supplier Management.",
 };
 
 /**
@@ -126,19 +130,19 @@ export const ledgerService = {
 
   /**
    * Active groups for the generic Create Ledger screen's Group selector —
-   * excluding the "Bank Accounts" subtree (15-bank-management.md) and the
-   * "Sundry Debtors" subtree (26-customer-management.md): ledgers under
-   * those are created only through Bank/Customer Management, atomically
-   * with their detail rows.
+   * excluding the three reserved subtrees: "Bank Accounts"
+   * (15-bank-management.md), "Sundry Debtors" (26-customer-management.md),
+   * and "Sundry Creditors" (27-supplier-management.md). Ledgers under any of
+   * those are created only through Bank/Customer/Supplier Management,
+   * atomically with their detail rows.
    */
   async listSelectableLedgerGroupsForLedger(): Promise<LedgerGroup[]> {
     const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "view");
 
     const groups = await ledgerGroupRepository.findMany(user.companyId, { status: "active" });
-    const bankIds = getBankAccountsSubtreeIds(groups);
-    const debtorIds = getSundryDebtorsSubtreeIds(groups);
-    return groups.filter((group) => !bankIds.has(group.id) && !debtorIds.has(group.id));
+    const reservedIds = getReservedLedgerGroupSubtreeIds(groups);
+    return groups.filter((group) => !reservedIds.has(group.id));
   },
 
   /**
@@ -198,6 +202,11 @@ export const ledgerService = {
     if (getSundryDebtorsSubtreeIds(allGroups).has(group.id)) {
       throw new AppError(
         'Ledgers under "Sundry Debtors" can only be created through Customer Management.'
+      );
+    }
+    if (getSundryCreditorsSubtreeIds(allGroups).has(group.id)) {
+      throw new AppError(
+        'Ledgers under "Sundry Creditors" can only be created through Supplier Management.'
       );
     }
 

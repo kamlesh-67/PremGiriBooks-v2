@@ -65,7 +65,7 @@ Implement all master data and shared business engines required by transactional 
 
 Phase Status
 
-🟨 In Progress — Accounting Foundation group complete (all 5 implemented as of 2026-07-14). Inventory Masters group complete (all 7 implemented as of 2026-07-18): Unit Management (#17, `context/feature-specs/19-unit-management.md`) implemented 2026-07-14; Category Management (#18, `context/feature-specs/20-category-management.md`) implemented 2026-07-15; Brand Management (#19, `context/feature-specs/21-brand-management.md`) implemented 2026-07-15; HSN Management (#20, `context/feature-specs/22-hsn-management.md`) implemented 2026-07-15; GST Rate Management (#21, `context/feature-specs/23-gst-rate-management.md`) implemented 2026-07-15; Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) implemented 2026-07-18; Product Management (#23, `context/feature-specs/25-product-management.md`) implemented 2026-07-18. Business Parties group started 2026-07-19: Customer Management (#24, `context/feature-specs/26-customer-management.md`) implemented 2026-07-19; Supplier Management (#25) remains drafted-only. Pricing and Shared ERP Engines groups below are not started.
+🟨 In Progress — Accounting Foundation group complete (all 5 implemented as of 2026-07-14). Inventory Masters group complete (all 7 implemented as of 2026-07-18): Unit Management (#17, `context/feature-specs/19-unit-management.md`) implemented 2026-07-14; Category Management (#18, `context/feature-specs/20-category-management.md`) implemented 2026-07-15; Brand Management (#19, `context/feature-specs/21-brand-management.md`) implemented 2026-07-15; HSN Management (#20, `context/feature-specs/22-hsn-management.md`) implemented 2026-07-15; GST Rate Management (#21, `context/feature-specs/23-gst-rate-management.md`) implemented 2026-07-15; Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) implemented 2026-07-18; Product Management (#23, `context/feature-specs/25-product-management.md`) implemented 2026-07-18. Business Parties group complete (both implemented as of 2026-07-19): Customer Management (#24, `context/feature-specs/26-customer-management.md`) implemented 2026-07-19; Supplier Management (#25, `context/feature-specs/27-supplier-management.md`) implemented 2026-07-19. Pricing and Shared ERP Engines groups below are not started.
 
 ---
 
@@ -113,9 +113,9 @@ Feature-specs for the remaining six items were all drafted 2026-07-14 (spec-file
 ## Business Parties
 
 Feature-specs for both items were drafted 2026-07-18. Customer Management (#24) was
-implemented 2026-07-19 (git branch `new-features`); Supplier Management (#25) remains
-drafted-only. Spec-file numbers are sequential and never reused, so they diverge from
-tracker numbers:
+implemented 2026-07-19 (git branch `new-features`); Supplier Management (#25) was
+implemented later the same day (git branch `26-customer-manage`), closing this group.
+Spec-file numbers are sequential and never reused, so they diverge from tracker numbers:
 
 | Tracker # | Feature             | Spec file                                          |
 | --------- | ------------------- | -------------------------------------------------- |
@@ -125,7 +125,7 @@ tracker numbers:
 | #   | Feature             | Depends On    | Status |
 | --- | ------------------- | ------------- | ------ |
 | 24  | Customer Management | Ledger Master | ✅     |
-| 25  | Supplier Management | Ledger Master | ⬜     |
+| 25  | Supplier Management | Ledger Master | ✅     |
 
 ---
 
