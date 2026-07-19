@@ -72,6 +72,10 @@ export const companySettingsSchema = z.object({
   timeFormat: z.enum(["12h", "24h"]),
   numberFormat: z.string().trim().min(1, "Number format is required"),
   currencyFormat: z.string().trim().min(1, "Currency format is required"),
+  // The Inventory Engine's negative-stock gate (32-inventory-engine.md;
+  // code-standards.md "Negative stock depends on company settings") — the
+  // one piece of UI that spec ships.
+  allowNegativeStock: z.boolean(),
 });
 
 export type CompanySettingsInput = z.infer<typeof companySettingsSchema>;

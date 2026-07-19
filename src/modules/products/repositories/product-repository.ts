@@ -98,6 +98,35 @@ function assertMinStockLevelPrecision(minStockLevel: number, decimalPlaces: numb
   }
 }
 
+/**
+ * Once the Inventory Engine has recorded any movement for a product,
+ * `unitId`/`productType` become immutable — changing either would silently
+ * re-denominate stock history recorded under the old unit/type
+ * (25-product-management.md's forward note; enforced here per
+ * 32-inventory-engine.md's Business Rules, the first consumer of that
+ * note). Only checked when one of the two actually changed — an update
+ * that leaves both alone must keep working even once movements exist.
+ */
+async function assertUnitAndTypeImmutableIfMovementsExist(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  data: ProductPersistData,
+  existing: { unitId: string; productType: ProductType }
+): Promise<void> {
+  if (data.unitId === existing.unitId && data.productType === existing.productType) {
+    return;
+  }
+  const hasMovements = await tx.stockTransaction.findFirst({
+    where: { productId },
+    select: { id: true },
+  });
+  if (hasMovements) {
+    throw new AppError(
+      "This product has recorded stock movements — its unit and product type can no longer be changed."
+    );
+  }
+}
+
 const MASTER_OPTION_SELECT = { id: true, name: true, isActive: true } as const;
 const UNIT_OPTION_SELECT = {
   id: true,
@@ -320,6 +349,7 @@ export const productRepository = {
         return null;
       }
 
+      await assertUnitAndTypeImmutableIfMovementsExist(tx, id, data, existing);
       await verifyReferences(tx, companyId, data, existing);
 
       try {

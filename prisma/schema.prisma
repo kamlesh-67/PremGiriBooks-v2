@@ -88,20 +88,27 @@ model Company {
   auditLogs         AuditLog[]
   documentSequences DocumentSequence[]
   vouchers          Voucher[]
+  stockTransactions StockTransaction[]
 
   @@index([companyName])
 }
 
 model CompanySettings {
-  id             String   @id @default(uuid())
-  companyId      String   @unique
-  defaultTheme   String   @default("dark")
-  dateFormat     String   @default("DD/MM/YYYY")
-  timeFormat     String   @default("24h")
-  numberFormat   String   @default("en-IN")
-  currencyFormat String   @default("INR")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  companyId          String   @unique
+  defaultTheme       String   @default("dark")
+  dateFormat         String   @default("DD/MM/YYYY")
+  timeFormat         String   @default("24h")
+  numberFormat       String   @default("en-IN")
+  currencyFormat     String   @default("INR")
+  // Inventory Engine's negative-stock gate (32-inventory-engine.md;
+  // code-standards.md "Negative stock depends on company settings") — when
+  // false (default), an OUT movement that would take current stock below
+  // zero is rejected; when true, it is allowed and stock reads back
+  // negative.
+  allowNegativeStock Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id])
 }
@@ -522,7 +529,8 @@ model Warehouse {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  products Product[]
+  products          Product[]
+  stockTransactions StockTransaction[]
 
   @@unique([companyId, name])
   @@unique([companyId, code])
@@ -595,7 +603,8 @@ model Product {
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
-  priceListItems PriceListItem[]
+  priceListItems    PriceListItem[]
+  stockTransactions StockTransaction[]
 
   @@unique([companyId, name])
   @@unique([companyId, productCode])
@@ -998,4 +1007,69 @@ model VoucherEntry {
   @@unique([voucherId, lineNumber])
   @@index([ledgerId])
   @@index([voucherId])
+}
+
+// 32-inventory-engine.md — the Inventory Engine's own type/direction split,
+// distinct from Voucher's BalanceType (DEBIT/CREDIT): stock movement is
+// IN/OUT, always a positive quantity (current stock = Sigma IN - Sigma OUT,
+// explicit over signed quantities).
+enum StockTransactionType {
+  OPENING_STOCK
+  PURCHASE
+  PURCHASE_RETURN
+  SALES
+  SALES_RETURN
+  TRANSFER
+  ADJUSTMENT
+  PHYSICAL_VERIFICATION
+}
+
+enum StockDirection {
+  IN
+  OUT
+}
+
+// The single place stock movement exists (architecture-context.md Invariant
+// 7; code-standards.md "Stock quantity must never be updated directly.
+// Current stock is calculated from stock transactions") —
+// 32-inventory-engine.md. No update/delete API exists anywhere for this
+// model: corrections are opposite-direction ADJUSTMENT rows recorded by
+// future screens (#45), mirroring VoucherEntry's immutability.
+//
+// No `financialYearId` — deliberate: stock is continuous across financial
+// years (closing stock of one year IS opening stock of the next), unlike
+// Voucher which is FY-scoped. `referenceType`/`referenceId` is a polymorphic
+// source-document link with no FK, same reasoning as Voucher — source
+// document tables (#36, #41, #42) don't exist yet. `transferGroupId` links
+// one transfer's OUT and IN rows (exactly two rows sharing one value,
+// written atomically by `transferStock`); null for every other type.
+// `unitCost` is an optional snapshot (set by purchases/opening stock, null
+// where meaningless) — stored data, NOT used for valuation today (Latest
+// Purchase Cost reads `Product.purchasePrice` instead); kept for a future
+// FIFO/Weighted-Average costing method that cannot be computed
+// retroactively without per-movement cost history.
+model StockTransaction {
+  id              String               @id @default(uuid())
+  companyId       String
+  company         Company              @relation(fields: [companyId], references: [id])
+  productId       String
+  product         Product              @relation(fields: [productId], references: [id])
+  warehouseId     String
+  warehouse       Warehouse            @relation(fields: [warehouseId], references: [id])
+  transactionType StockTransactionType
+  direction       StockDirection
+  quantity        Decimal              @db.Decimal(14, 4)
+  unitCost        Decimal?             @db.Decimal(14, 2)
+  transactionDate DateTime             @db.Date
+  referenceType   String?
+  referenceId     String?
+  transferGroupId String?
+  narration       String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([companyId, productId, warehouseId])
+  @@index([companyId, transactionDate])
+  @@index([referenceType, referenceId])
+  @@index([transferGroupId])
 }
