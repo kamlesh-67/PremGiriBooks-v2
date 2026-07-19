@@ -63,6 +63,10 @@ describe("formatNumber", () => {
     expect(formatNumber("SO", 6, 42)).toBe("SO-000042");
     expect(formatNumber("GRN", 1, 7)).toBe("GRN-7");
   });
+
+  it("clamps an out-of-range stored padding instead of allocating an unbounded string", () => {
+    expect(formatNumber("INV", 1_000_000, 1).length).toBeLessThan(100);
+  });
 });
 
 describe("ensureSequence", () => {
@@ -154,6 +158,35 @@ describe("previewNextNumber", () => {
     });
 
     expect(result).toEqual({ number: 7, formatted: "INV-0007" });
+  });
+
+  it("lazily creates the sequence row on first preview and previews its default nextNumber", async () => {
+    financialYearFindUniqueMock.mockResolvedValueOnce(OPEN_FY);
+    findUniqueMock.mockResolvedValueOnce(null); // ensureSequence's existence check: no row yet
+    createMock.mockResolvedValueOnce({ id: "seq-1" }); // ensureSequence creates it
+    findUniqueOrThrowMock.mockResolvedValueOnce({
+      id: "seq-1",
+      prefix: "INV",
+      padding: 4,
+      nextNumber: 1,
+    }); // preview read of the just-created row
+
+    const result = await previewNextNumber({
+      companyId: COMPANY_ID,
+      financialYearId: FY_ID,
+      documentType: "SALES_INVOICE",
+    });
+
+    expect(createMock).toHaveBeenCalledWith({
+      data: {
+        companyId: COMPANY_ID,
+        financialYearId: FY_ID,
+        documentType: "SALES_INVOICE",
+        prefix: "INV",
+        padding: 4,
+      },
+    });
+    expect(result).toEqual({ number: 1, formatted: "INV-0001" });
   });
 });
 

@@ -23,7 +23,7 @@ export function DocumentSequenceTable({ sequences, canEdit }: DocumentSequenceTa
           <TableHead>Document Type</TableHead>
           <TableHead>Prefix</TableHead>
           <TableHead className="text-right">Padding</TableHead>
-          <TableHead className="text-right">Next Number</TableHead>
+          <TableHead className="text-right">Preview</TableHead>
           <TableHead className="text-right">Actions</TableHead>
         </TableRow>
       </TableHeader>

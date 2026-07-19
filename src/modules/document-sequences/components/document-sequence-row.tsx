@@ -9,7 +9,14 @@ import { Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { updateDocumentSequenceAction } from "@/modules/document-sequences/actions/document-sequence-actions";
 import {
@@ -23,8 +30,14 @@ interface DocumentSequenceRowProps {
   canEdit: boolean;
 }
 
+// Mirrors document-number-engine.ts's formatNumber clamp — this preview is
+// display-only and independent of the engine, so it needs its own guard
+// against an out-of-range stored `padding` driving an unbounded padStart.
+const MAX_SAFE_PADDING = 64;
+
 function formatPreview(prefix: string, padding: number, nextNumber: number): string {
-  return `${prefix}-${String(nextNumber).padStart(padding, "0")}`;
+  const safePadding = Math.min(padding, MAX_SAFE_PADDING);
+  return `${prefix}-${String(nextNumber).padStart(safePadding, "0")}`;
 }
 
 /**
@@ -48,8 +61,14 @@ export function DocumentSequenceRow({ sequence, canEdit }: DocumentSequenceRowPr
     setIsSaving(true);
     try {
       const result = await updateDocumentSequenceAction(sequence.documentType, data);
-      if (result.success) {
+      if (result.success && result.data) {
         toast.success("Document numbering saved.");
+        // Reset with the server-normalized values (trimmed/uppercased
+        // prefix) — the form's own defaultValues were only captured at
+        // mount, so without this, reopening the editor after a save would
+        // show the stale pre-save values instead of what was actually
+        // persisted.
+        form.reset({ prefix: result.data.prefix, padding: result.data.padding });
         setIsEditing(false);
         router.refresh();
         return;
@@ -79,6 +98,7 @@ export function DocumentSequenceRow({ sequence, canEdit }: DocumentSequenceRowPr
                 name="prefix"
                 render={({ field }) => (
                   <FormItem className="w-32">
+                    <FormLabel className="sr-only">{`${sequence.label} prefix`}</FormLabel>
                     <FormControl>
                       <Input placeholder="Prefix" {...field} />
                     </FormControl>
@@ -91,6 +111,7 @@ export function DocumentSequenceRow({ sequence, canEdit }: DocumentSequenceRowPr
                 name="padding"
                 render={({ field }) => (
                   <FormItem className="w-24">
+                    <FormLabel className="sr-only">{`${sequence.label} padding`}</FormLabel>
                     <FormControl>
                       <Input
                         type="number"

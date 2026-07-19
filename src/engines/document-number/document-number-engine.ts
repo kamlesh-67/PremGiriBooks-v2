@@ -19,6 +19,15 @@ import {
 // incrementing the stored column past the column's own range.
 export const INT4_MAX = 2147483647;
 
+// The settings schema bounds `padding` to 1-8 at the only write path, but
+// `formatNumber` also renders whatever is already stored in the column
+// (document-sequence-schema.ts's bound doesn't retroactively apply to old
+// rows or a direct DB edit) — clamp defensively so a corrupted/out-of-range
+// value can't drive `padStart` into an unbounded string allocation. Well
+// above any bound the settings schema would ever accept, so it never
+// affects a legitimately configured sequence.
+const MAX_SAFE_PADDING = 64;
+
 type PrismaClientOrTransaction = typeof prisma | Prisma.TransactionClient;
 
 /**
@@ -28,7 +37,8 @@ type PrismaClientOrTransaction = typeof prisma | Prisma.TransactionClient;
  * truncation exists here.
  */
 export function formatNumber(prefix: string, padding: number, number: number): string {
-  return `${prefix}-${String(number).padStart(padding, "0")}`;
+  const safePadding = Math.min(padding, MAX_SAFE_PADDING);
+  return `${prefix}-${String(number).padStart(safePadding, "0")}`;
 }
 
 /**
