@@ -174,15 +174,18 @@ Decisions
   quantities/pricing — from that point on, only `status` (via the documented transitions)
   and the delivery-driven `deliveredQuantity` may change; no update API accepts a
   `CONFIRMED`-or-later order's id for a header/line edit.
-- **Status transitions**: `DRAFT → CONFIRMED` (Confirm), `CONFIRMED →
-  PARTIALLY_DELIVERED` (automatic, set by Delivery Challan posting the first time any line
-  has `0 < deliveredQuantity < quantity` for at least one line while others may be fully
-  delivered), `→ DELIVERED` (automatic, set when every line's `deliveredQuantity ===
-  quantity`), `DELIVERED → CLOSED` (Close, a manual staff action confirming no further
-  action is expected — e.g., no invoice will follow, or invoicing is tracked elsewhere),
-  any of `DRAFT`/`CONFIRMED` `→ CANCELLED` (Cancel — **only while no Delivery Challan has
-  been posted against it**; once any delivery exists, cancellation is rejected with a
-  friendly error naming the challan).
+- **Status transitions**: `DRAFT → CONFIRMED` (Confirm), `CONFIRMED → PARTIALLY_DELIVERED`
+  (automatic, recomputed by every `applyDelivery` call: triggered whenever **any** line has
+  `deliveredQuantity > 0` while the order as a whole is not yet fully delivered — the
+  trigger is order-wide progress, not a single line's own partial state, so a line that is
+  fully delivered while a sibling line remains untouched or only partially delivered still
+  counts), `→ DELIVERED` (automatic, set only when **every** line's `deliveredQuantity ===
+  quantity`) — an order can never remain `CONFIRMED` once any delivery has been applied to
+  it; from that point on it is always `PARTIALLY_DELIVERED` or `DELIVERED`, `DELIVERED →
+  CLOSED` (Close, a manual staff action confirming no further action is expected — e.g., no
+  invoice will follow, or invoicing is tracked elsewhere), any of `DRAFT`/`CONFIRMED` `→
+  CANCELLED` (Cancel — **only while no Delivery Challan has been posted against it**; once
+  any delivery exists, cancellation is rejected with a friendly error naming the challan).
 - **Line calculation and pricing/HSN posture** — identical to `35-quotations.md`'s rules,
   applied at order-creation/edit time (server-side, engine-computed, never trusted from
   the client; below-cost is a non-blocking warning; missing HSN is a non-blocking

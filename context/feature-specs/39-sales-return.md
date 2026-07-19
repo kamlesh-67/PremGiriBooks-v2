@@ -155,12 +155,19 @@ Decisions
   the **overridden** tax values when the source line was tax-overridden, per spec 38's
   audit trail) — a return cannot invent a different price or tax treatment than what was
   actually invoiced. Only `quantity` (≤ the returnable remainder) is entered.
-- **`refundMode`** — `LEDGER_ADJUSTMENT` (default): reduces the customer's outstanding
-  ledger balance, no cash moves. `CASH_REFUND`: cash/bank actually leaves the business,
-  requiring `refundLedgerId` (any active company Ledger, typically Cash-in-Hand or a
-  Bank Account ledger — the same explicit-per-transaction convention as
-  `38-sales-invoice.md`'s payment lines). `refundLedgerId` is required when and only when
-  `refundMode = CASH_REFUND` (object-level Zod refine).
+- **`refundMode`** — `LEDGER_ADJUSTMENT` (the Prisma column default, for the common
+  `PERMANENT`/converted-`QUICK`-source case): reduces the customer's outstanding ledger
+  balance, no cash moves. `CASH_REFUND`: cash/bank actually leaves the business, requiring
+  `refundLedgerId` (any active company Ledger, typically Cash-in-Hand or a Bank Account
+  ledger — the same explicit-per-transaction convention as `38-sales-invoice.md`'s payment
+  lines). `refundLedgerId` is required when and only when `refundMode = CASH_REFUND`
+  (object-level Zod refine). **Resolution order for a `WALK_IN`-sourced return** (the
+  schema's own column default is a plain fallback, not aware of the source invoice's
+  mode): `createDraft` resolves the source `salesInvoiceId`'s `customerMode` **before**
+  persisting anything, and for a `WALK_IN` source forces `refundMode = CASH_REFUND`
+  regardless of the Prisma default or any client-supplied value — an explicit
+  `LEDGER_ADJUSTMENT` submitted for a `WALK_IN`-sourced return is rejected outright (not
+  silently overridden), matching the Business Rules enforcement below.
 - **No `branchId`**, same posture as every spec in this phase.
 
 ---
@@ -171,9 +178,21 @@ Decisions
   `status = POSTED` belonging to the same company; a `DRAFT`/`CANCELLED` invoice is
   rejected as not-returnable.
 - **Returnable quantity**: for each `salesInvoiceItemId`, the maximum returnable quantity
-  is `salesInvoiceItem.quantity − Σ(quantity of all non-cancelled prior SalesReturnItems
-  against that same salesInvoiceItemId)`, re-checked inside the posting transaction (the
-  same race-guard pattern `37-delivery-challans.md` uses for order remaining-quantity).
+  is `salesInvoiceItem.quantity − Σ(quantity of prior SalesReturnItems whose parent
+  SalesReturn has status = POSTED, against that same salesInvoiceItemId)`. **`DRAFT`
+  returns are excluded from this sum entirely** — an unposted draft has not actually
+  consumed any returnable capacity; it may still be edited, abandoned, or never posted,
+  so counting it would incorrectly shrink what a *different* return can claim before this
+  one even commits (there is no draft-reservation/hold concept in this phase). A
+  `CANCELLED` return's quantity is excluded too, since its reversal already gave the
+  capacity back. **Concurrency safety, made explicit**: `postSalesReturn` computes this
+  sum and posts inside one **Serializable transaction with the same bounded-retry
+  contract as `37-delivery-challans.md`'s dispatch flow** (spec 32's
+  `SERIALIZABLE_RETRY` convention), so two concurrent posts against the same invoice line
+  cannot both observe the same pre-posting returnable quantity and both succeed — the
+  losing transaction retries up to the bounded limit and re-observes the now-reduced
+  returnable quantity, surfacing a friendly "insufficient returnable quantity" error on
+  that retry if it no longer fits.
 - **Editable while `DRAFT`.** Posting freezes the document; no update API accepts a
   `POSTED`-or-later return's id.
 - **Posting (`postSalesReturn`, one transaction)**: mirrors `38-sales-invoice.md`'s

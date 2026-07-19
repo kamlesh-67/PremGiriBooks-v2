@@ -292,17 +292,29 @@ Decisions
     standards.md: "HSN Code is mandatory where applicable").
 - **Quick Customer conversion**: an explicit "Save as Permanent Customer" checkbox, or an
   automatic conversion when posting would leave an unpaid balance (see Payment) for a
-  `QUICK` invoice — either path calls `customerService.createCustomer` (spec 26) with the
-  quick fields mapped onto its input shape, then sets `customerId` and switches
-  `customerMode` to `PERMANENT` on this invoice before the posting transaction opens (the
-  new Customer/Ledger must exist before the voucher that debits its ledger is built).
+  `QUICK` invoice. This conversion happens **inside the same posting transaction** as the
+  rest of `postSalesInvoice` (the first sub-step of Posting below), not in a separate
+  transaction before it opens — `customerService.createCustomer` (spec 26) gains an
+  optional `tx?` parameter for this one caller (the same `tx?` convention every engine and
+  cross-module call in this project already follows), so the new Customer/Ledger commits
+  or rolls back atomically with the GST/stock/voucher work that follows it: if any later
+  step in this same transaction fails, the just-created Customer/Ledger rolls back too,
+  leaving no orphan record. `customerId` is set and `customerMode` switched to
+  `PERMANENT` on this invoice as part of that same transaction, before the voucher that
+  debits the new ledger is built. If `customerId` is already set when posting is retried
+  (a prior attempt already converted and committed successfully before failing on a later
+  step), the conversion is skipped — it does not re-run and does not create a second
+  Customer for the same invoice.
 - **`salesOrderId`/`deliveryChallanId`** — optional, mutually compatible (an invoice may
   reference both, one, or neither). When `deliveryChallanId` is set, its status must be
   `DISPATCHED` and not already linked to another invoice (`@unique` enforces the second
   half at the database level). One Delivery Challan → at most one Sales Invoice in this
   phase (see `37-delivery-challans.md`'s Do Not on consolidated billing) — a business
   needing to invoice several challans together raises separate invoices; this is a
-  documented, deliberate simplification, not an oversight.
+  documented, deliberate simplification, not an oversight. Full customer/company/order
+  identity agreement and exact line/quantity matching between the invoice and its linked
+  challan are re-verified at posting time (see Posting, step 2), not just the status
+  check above.
 
 ## Posting (`postSalesInvoice`, one transaction)
 
@@ -311,25 +323,46 @@ own OUT-batch convention, spec 32, since this posting always contains OUT stock 
 
 1. Re-validate every business rule above against the **current** state (not the state
    when the draft was last saved) — active customer/product/warehouse, FY still open,
-   HSN present, below-cost permission if applicable, all six ledger mappings configured,
-   Delivery Challan (if linked) still `DISPATCHED` and unclaimed.
-2. Recompute `calculateDocument` from the current lines (never trust stored draft totals
+   HSN present, below-cost permission if applicable, all six ledger mappings configured.
+   If a Quick Customer conversion applies (see above), run it here, first, inside this
+   same transaction.
+2. **Delivery Challan identity/line consistency** (only when `deliveryChallanId` is set):
+   the challan's `customerId` must equal this invoice's own customer (resolved from
+   `customerId` for `PERMANENT`/converted-`QUICK` — a challan can only ever have a
+   `PERMANENT` customer, per spec 37, so a `WALK_IN` invoice cannot reference one), and
+   its `companyId` must match (a belt-and-suspenders guard on a cross-document reference,
+   redundant with normal company-scoping but checked explicitly here). If both
+   `salesOrderId` and the challan's own `salesOrderId` are present, they must agree — an
+   invoice cannot claim a different order than the very challan it is invoicing. The
+   challan's own status must still be `DISPATCHED` and unclaimed by another invoice.
+   **Every invoice line's `productId` and `quantity` must match one of the challan's own
+   lines exactly** (one invoice line per challan line, quantity equal — splitting or
+   partially invoicing a challan line is not allowed in this phase). Any mismatch rejects
+   posting with a friendly, line-specific error, before any stock or voucher entry is
+   created.
+3. Recompute `calculateDocument` from the current lines (never trust stored draft totals
    at posting time — they may be stale if a referenced product/rate changed since save).
-3. Generate `invoiceNumber` (`ensureSequence` before the transaction, `generateNumber`
+4. **Validate payments against this just-recomputed total, not the stale draft total**:
+   `Σ payments ≤ grandTotal` for every customer mode, and `Σ payments === grandTotal`
+   exactly for `WALK_IN` — both checked here, against this step's freshly-recomputed
+   `grandTotal`, before any engine call; a payment total checked only against a
+   since-changed draft total (or only checked for individual positivity) would silently
+   let an overpayment or an underpaid `WALK_IN` sale through.
+5. Generate `invoiceNumber` (`ensureSequence` before the transaction, `generateNumber`
    inside it — spec 34's contract).
-4. Call `inventoryEngine.recordMovements(companyId, lines, tx)` — one
+6. Call `inventoryEngine.recordMovements(companyId, lines, tx)` — one
    `StockTransactionType.SALES`/`OUT` line per invoice line, `referenceType =
    "SALES_INVOICE"`.
-5. Build the balanced voucher entry set (see Ledger Posting below) and call
+7. Build the balanced voucher entry set (see Ledger Posting below) and call
    `voucherEngine.postVoucher(companyId, input, tx)` (`VoucherType.SALES`).
-6. If `deliveryChallanId` is set, call `deliveryChallanService.markInvoiced(id, tx)`
-   (spec 37).
-7. If `salesOrderId` is set and no `deliveryChallanId` linkage already advanced it, this
+8. If `deliveryChallanId` is set, call `deliveryChallanService.markInvoiced(id, tx)`
+   (spec 37) — safe now that step 2 has already confirmed the identity/line match.
+9. If `salesOrderId` is set and no `deliveryChallanId` linkage already advanced it, this
    spec does **not** call `SalesOrder.applyDelivery` itself — fulfillment tracking is
    Delivery Challan's exclusive responsibility (spec 36's Business Rules); a direct
    Order→Invoice flow with no challan in between leaves the order's `deliveredQuantity`
    at 0, a documented gap for a business that skips Delivery Challans entirely (Do Not).
-8. Set `status = POSTED`, `voucherId`.
+10. Set `status = POSTED`, `voucherId`.
 
 ## Ledger Posting (the balanced entry set `postVoucher` receives)
 
@@ -350,9 +383,12 @@ own OUT-batch convention, spec 32, since this posting always contains OUT stock 
   `grandTotal` ≡ Σ credits (sales + tax + round-off), so `postVoucher`'s balanced-sum
   check always passes for correctly-computed input — any mismatch indicates a bug in this
   spec's own aggregation, not a data problem to work around.
-- **`WALK_IN` must be paid in full**: `Σ payments === grandTotal` exactly, checked before
-  the transaction opens — rejected otherwise with a friendly "walk-in sales require full
-  payment" error (no ledger exists to carry a walk-in balance).
+- **`WALK_IN` must be paid in full**: `Σ payments === grandTotal` exactly — checked in
+  Posting step 4, inside the transaction, against the freshly recomputed `grandTotal`
+  (never a stale draft total) — rejected otherwise with a friendly "walk-in sales require
+  full payment" error (no ledger exists to carry a walk-in balance). Every other customer
+  mode is capped at `Σ payments ≤ grandTotal` in that same step — an overpayment is
+  rejected, never silently posted as a negative customer balance.
 - **Credit-limit check is advisory only** (spec 26's deferral): if posting would leave a
   `PERMANENT` customer's outstanding balance over their stored `creditLimit`, the UI shows
   a non-blocking confirmation; the server does not reject on this basis.
@@ -417,7 +453,7 @@ Pages (under the `/sales` hub)
 - `/sales/invoices` — Sales Invoice list (Number, Customer/Quick name/"Walk-in", Date,
   Status, Grand Total, Paid, Actions) with search + status/customer/date filters
 - `/sales/invoices/new` — Create Sales Invoice (customer-mode toggle at the top;
-  optionally pre-filled from a Delivery Challan's "Create Invoice" action)
+  optionally prefilled from a Delivery Challan's "Create Invoice" action)
 - `/sales/invoices/[id]` — View Sales Invoice (read-only detail once posted, tax
   breakdown, payment breakdown, status actions: Post / Cancel; a browser **Print**
   action using `ui-context.md`'s A4/A5 print-stylesheet convention — the one exception to
@@ -475,8 +511,13 @@ Engine OUT-batch convention), vitest coverage for:
 - the full posting orchestration (mocked engine calls) — correct call order, correct
   entry balancing across every customer mode × payment-split combination, including the
   round-off sign in both directions
-- `WALK_IN` full-payment rejection, `QUICK` auto-conversion, credit-limit advisory
-  (non-blocking) behavior
+- `WALK_IN` full-payment rejection (exact match) and overpayment rejection for every
+  other mode (`Σ payments > grandTotal`), both validated against the freshly recomputed
+  total inside the transaction, not a stale draft total; `QUICK` auto-conversion
+  (including the retry-skips-reconversion case) and credit-limit advisory (non-blocking)
+  behavior
+- Delivery Challan identity/line-consistency rejection matrix (customer mismatch, company
+  mismatch, disagreeing `salesOrderId`, product/quantity mismatch)
 - below-cost approve-gate matrix (with/without the extra permission)
 - HSN hard-block matrix
 - tax-override audit trail (computed values preserved alongside overridden values)
@@ -512,9 +553,17 @@ Verify
   voucher and a matching `StockTransactionType.SALES`/`OUT` stock transaction per line,
   atomically (both succeed or both roll back on an injected failure).
 - A `WALK_IN` invoice with full payment posts correctly with no customer-ledger entry; an
-  underpaid `WALK_IN` attempt is rejected before any write.
+  underpaid `WALK_IN` attempt is rejected before any write; an overpayment is rejected for
+  every customer mode, validated against the freshly recomputed `grandTotal` inside the
+  posting transaction, not a stale draft total.
 - A `QUICK` invoice left with an unpaid balance auto-converts to a real `Customer`+
-  `Ledger` via `customerService.createCustomer`, and the voucher debits that new ledger.
+  `Ledger` via `customerService.createCustomer` **inside the posting transaction**, and
+  the voucher debits that new ledger; if a later step in that same transaction fails, the
+  new Customer/Ledger rolls back with it (no orphan record); a retry with `customerId`
+  already set does not create a second Customer.
+- A Sales Invoice linked to a Delivery Challan is rejected before posting if the
+  challan's customer, company, or linked sales order disagrees with the invoice's own, or
+  if any invoice line's product/quantity doesn't match the challan's lines exactly.
 - A below-cost line blocks posting for a user without `approve`, succeeds for one with
   it; a taxed line with no HSN blocks posting unconditionally.
 - A tax override stores both the computed and overridden values, uses the overridden

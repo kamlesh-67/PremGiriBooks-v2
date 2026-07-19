@@ -146,8 +146,11 @@ Decisions
 - **`refundMode`/`refundLedgerId`** — reuses spec 39's `RefundMode` enum. Here,
   `LEDGER_ADJUSTMENT` reduces what the business owes the supplier (Sundry Creditors);
   `CASH_REFUND` models the supplier actually returning cash/bank funds to the business
-  (via `refundLedgerId`, any active company Ledger) — the mirror of Sales Return's two
-  options, same conditional-`refundLedgerId` validation rule.
+  via `refundLedgerId` — **restricted, like `44-purchase-invoice.md`'s payment ledgers,
+  to an active, company-owned ledger that is either the seeded Cash-in-Hand ledger or
+  carries a `BankAccount` detail row** (any other ledger is rejected server-side) — the
+  mirror of Sales Return's two options, same conditional-`refundLedgerId` validation
+  rule.
 - No `branchId`, same posture as every spec in this project.
 
 ---
@@ -157,6 +160,11 @@ Decisions
 Identical structure to `39-sales-return.md`'s, with the ledger and stock direction
 reversed:
 
+- **Line/header consistency**: every `PurchaseReturnItem.purchaseInvoiceItemId` must
+  belong to the header's own `purchaseInvoiceId` — validated server-side before computing
+  returnable quantities, stock movements, or voucher entries; a line referencing a
+  different invoice's item is rejected outright (this guards against a client submitting
+  an item id from an unrelated invoice, not just a trusted assumption).
 - **Requires a `POSTED` Purchase Invoice.**
 - **Returnable quantity**: capped per `purchaseInvoiceItemId` at original quantity minus
   already-returned quantity, re-checked inside the posting transaction (the same race
@@ -281,12 +289,16 @@ Do not implement
 
 Verify
 
+- A `PurchaseReturnItem` referencing a `purchaseInvoiceItemId` that does not belong to
+  the header's own `purchaseInvoiceId` is rejected outright.
 - A Purchase Return against a posted invoice caps each line at its correctly-computed
   remaining returnable quantity, including across two sequential partial returns.
 - Posting produces a balanced `VoucherType.PURCHASE_RETURN` voucher and a matching
   `StockTransactionType.PURCHASE_RETURN`/`OUT` stock transaction per line, atomically.
 - Ledger posting correctly reverses Purchase Invoice's direction (Credit Purchase
-  Account + Input Tax, Debit Supplier/refund ledger) for both refund modes.
+  Account + Input Tax, Debit Supplier/refund ledger) for both refund modes; a
+  `refundLedgerId` that is neither the Cash-in-Hand ledger nor a `BankAccount`-linked
+  ledger is rejected.
 - Cancelling a posted return produces a correct mirrored voucher reversal and reversed
   stock transaction.
 - `npx tsc --noEmit`, `npx eslint src prisma`, `npx vitest run`, and `next build` all

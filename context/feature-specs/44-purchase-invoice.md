@@ -102,7 +102,7 @@ model PurchaseInvoice {
   company                Company               @relation(fields: [companyId], references: [id])
   financialYearId        String
   financialYear          FinancialYear         @relation(fields: [financialYearId], references: [id])
-  invoiceNumber          String                // this system's own internal document number
+  invoiceNumber          String?               // this system's own document number — null until posted, see Decisions
   supplierInvoiceNumber  String                // the supplier's own bill number — see Decisions
   invoiceDate            DateTime              @db.Date
   supplierId             String
@@ -227,6 +227,17 @@ called out here)
   here.
 - **HSN hard block at posting** — identical rule to Sales Invoice (code-standards.md:
   "HSN Code is mandatory where applicable" applies to purchases too).
+- **`invoiceNumber` is nullable, assigned only at posting** — a `DRAFT` Purchase Invoice
+  has no committed identity yet (the Document Number Engine's `generateNumber` step runs
+  inside `postPurchaseInvoice`'s own transaction, per spec 34's contract, not at
+  `createDraft` time). The `@@unique([companyId, financialYearId, invoiceNumber])`
+  constraint still holds correctly with multiple `DRAFT` rows coexisting, since Postgres
+  unique indexes treat `NULL` values as distinct from one another — this is not a gap in
+  the constraint, it is exactly why the column can stay nullable without risking a false
+  collision. This avoids consuming a real, sequential invoice number for a draft that may
+  be edited repeatedly or never posted at all; `supplierInvoiceNumber` (required, unique
+  per supplier — see above), not `invoiceNumber`, is what identifies and looks up a
+  row before it is posted.
 - No `branchId`, same posture as every spec in this project.
 
 ---
@@ -252,9 +263,18 @@ Mirrors `38-sales-invoice.md`'s orchestration exactly, direction adjusted:
 
 1. Re-validate every business rule against current state (active supplier/product/
    warehouse, FY open, HSN present, all five new ledger mappings + the shared round-off
-   mapping configured, linked GRN still `RECEIVED` and unclaimed).
+   mapping configured, linked GRN still `RECEIVED` and unclaimed). **When
+   `goodsReceiptNoteId` is set, also verify identity/line consistency**: the GRN's
+   `supplierId` must equal this invoice's own `supplierId`, its `companyId` must match,
+   and if both `purchaseOrderId` and the GRN's own `purchaseOrderId` are present they
+   must agree; every invoice line's `productId` and `quantity` must match one of the
+   GRN's own lines exactly (one invoice line per GRN line, quantity equal — splitting or
+   partially invoicing a GRN line is not allowed in this phase). Any mismatch rejects
+   posting with a friendly, line-specific error, before any stock or voucher entry is
+   created.
 2. Recompute `calculateDocument` from current lines (never trust stale draft totals).
-3. Generate `invoiceNumber` (`ensureSequence`/`generateNumber`, spec 34's contract).
+3. Generate `invoiceNumber` (`ensureSequence`/`generateNumber`, spec 34's contract) — the
+   first time this row receives a real number (see Decisions).
 4. `inventoryEngine.recordMovements(companyId, lines, tx)` —
    `StockTransactionType.PURCHASE`/`IN`, `referenceType = "PURCHASE_INVOICE"`.
 5. Build the balanced voucher (see Ledger Posting) and call `voucherEngine.postVoucher`
@@ -269,11 +289,14 @@ Mirrors `38-sales-invoice.md`'s orchestration exactly, direction adjusted:
   (inter-state) for their respective totals (using overridden values where
   `isTaxOverridden`); `inputCessLedgerId` for `totalCess` when non-zero. Each posted
   only when non-zero.
-- **Credit side**: each `PurchaseInvoicePayment` row credits its own `ledgerId` (Cash-in-
-  Hand or a Bank Account ledger — same explicit-per-transaction convention as Sales
-  Invoice's payment lines, reversed direction since paying out is a credit to Cash/Bank);
-  any remainder (`grandTotal − Σ payments`) credits the supplier's Ledger (Sundry
-  Creditors).
+- **Credit side**: each `PurchaseInvoicePayment` row credits its own `ledgerId` —
+  **restricted to an active, company-owned ledger that is either the seeded Cash-in-Hand
+  ledger (spec 14) or carries a `BankAccount` detail row (spec 15)**; any other ledger
+  (e.g., a Sales/Purchase Account or an expense ledger) is rejected server-side as an
+  invalid settlement account, not left to the client's own restraint — same
+  explicit-per-transaction-choice convention as Sales Invoice's payment lines, reversed
+  direction since paying out is a credit to Cash/Bank; any remainder
+  (`grandTotal − Σ payments`) credits the supplier's Ledger (Sundry Creditors).
 - **Round off**: one entry to the shared `CompanySettings.roundOffLedgerId` — `CREDIT`
   when `roundOff` is negative, `DEBIT` when positive (the mirror of Sales Invoice's
   sign convention), skipped when zero.
@@ -323,7 +346,9 @@ non-empty ≤ 50 (server checks the per-supplier uniqueness), `placeOfSupplyStat
 against `GST_STATE_CODES`, `invoiceDate` calendar date, `narration` ≤ 500, lines array
 ≥ 1 (`productId`/`warehouseId` uuid, `quantity` > 0 with unit precision, `rate` ≥ 0 ≤ 2
 decimals, discount fields as prior specs, `overrideReason` required non-empty ≤ 500 when
-overridden), payments array (`ledgerId` uuid, `amount` > 0 ≤ 2 decimals).
+overridden), payments array (`ledgerId` uuid — server re-verifies it is active,
+company-owned, and either the Cash-in-Hand ledger or a `BankAccount`-linked ledger,
+rejecting any other ledger type — `amount` > 0 ≤ 2 decimals).
 
 ---
 
@@ -414,6 +439,14 @@ Verify
   in the posted voucher, and requires a non-empty reason.
 - A taxed line with no HSN blocks posting unconditionally.
 - Duplicate `(supplierId, supplierInvoiceNumber)` is rejected with a friendly error.
+- A Purchase Invoice linked to a Goods Receipt Note is rejected before posting if the
+  GRN's supplier, company, or linked purchase order disagrees with the invoice's own, or
+  if any invoice line's product/quantity doesn't match the GRN's lines exactly.
+- A payment ledger that is neither the Cash-in-Hand ledger nor a `BankAccount`-linked
+  ledger is rejected.
+- A `DRAFT` Purchase Invoice persists with `invoiceNumber = null`; multiple `DRAFT`
+  invoices coexist without a unique-constraint conflict; posting assigns the first real
+  `invoiceNumber`.
 - Cancelling a posted invoice produces a correct mirrored voucher reversal and matching
   reversed stock transaction.
 - Missing any of the five new Company Settings ledger mappings (or the shared Round Off

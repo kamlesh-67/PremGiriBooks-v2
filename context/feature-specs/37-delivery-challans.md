@@ -140,10 +140,13 @@ Decisions
   independently, per spec 38, exactly as Sales Order re-resolves rather than copies from
   Quotation).
 - `salesOrderId` — optional at the header (a challan may be raised directly with no prior
-  order — a common shortcut, mirroring Sales Order's own optional `quotationId`); when
-  present, every line's `salesOrderItemId` should reference an item of *that same* order
-  (validated server-side) — **no consolidated challan spanning multiple Sales Orders**
-  (Do Not).
+  order — a common shortcut, mirroring Sales Order's own optional `quotationId`).
+  **Linkage is conditional, not independently optional per line**: when `salesOrderId` is
+  set, every line **must** carry a `salesOrderItemId` referencing an item of *that same*
+  order (validated server-side; an item belonging to a different order is rejected); when
+  `salesOrderId` is absent, no line may carry a `salesOrderItemId` (rejected if present —
+  a line cannot reference an order item the header itself doesn't link to). **No
+  consolidated challan spanning multiple Sales Orders** (Do Not).
 - `warehouseId` per line, not per header — mirrors the Inventory Engine's own per-line
   granularity (spec 32) even though no stock call happens here, so the schema is already
   shaped correctly for the day a future spec decides to move the stock-out point here
@@ -171,8 +174,17 @@ Decisions
   that order line's remaining quantity (`salesOrderItem.quantity −
   salesOrderItem.deliveredQuantity`) at dispatch time — re-checked inside the dispatch
   transaction (not just at line-add time) to guard against two challans racing against
-  the same order line; the loser is rejected with a friendly "insufficient remaining
-  quantity on the linked order" error, mirroring the Inventory Engine's own
+  the same order line. **Concurrency safety, made explicit** (a plain read-then-write
+  check is not race-free under default isolation): the dispatch transaction runs
+  **Serializable, with the same bounded-retry contract the Inventory Engine's OUT-batch
+  posting uses** (spec 32's `SERIALIZABLE_RETRY` convention, also reused by Sales
+  Invoice's posting, spec 38) — `applyDelivery`'s remaining-quantity check and its
+  `deliveredQuantity` increment run inside that one Serializable transaction, so two
+  concurrent dispatches against the same order line cannot both observe the same
+  pre-update remaining quantity and both succeed; the loser's transaction aborts on
+  conflict, retries up to the bounded limit, and re-observes the now-reduced remaining
+  quantity on that retry — surfacing the friendly "insufficient remaining quantity on the
+  linked order" error if it no longer fits, mirroring the Inventory Engine's own
   insufficient-stock rejection style.
 - **Status transitions**: `DRAFT → DISPATCHED` (Dispatch), `DISPATCHED → INVOICED`
   (automatic, set when a Sales Invoice referencing this challan is posted — spec 38's
@@ -217,9 +229,11 @@ src/types/delivery-challan.ts
 
 Zod (`delivery-challan-schema.ts`): `customerId` uuid, `salesOrderId` optional uuid,
 `challanDate` calendar date, `narration` ≤ 500, lines array ≥ 1 with `productId`/
-`warehouseId` uuid, `quantity` > 0 honoring the product unit's decimal precision,
-`salesOrderItemId` optional uuid (server re-verifies it belongs to the referenced
-`salesOrderId` when both are present).
+`warehouseId` uuid, `quantity` > 0 honoring the product unit's decimal precision.
+`salesOrderItemId` is conditional, not a plain per-line optional field: an object-level
+refine makes it **required** on every line when `salesOrderId` is present (server
+re-verifies each referenced item belongs to that same `salesOrderId`, rejecting a
+different order's item) and **forbidden** on every line when `salesOrderId` is absent.
 
 ---
 

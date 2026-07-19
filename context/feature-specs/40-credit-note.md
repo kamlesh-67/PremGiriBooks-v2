@@ -130,10 +130,13 @@ Decisions
 - **`customerId` is required**, unlike `salesInvoiceId` (optional) — a Credit Note
   always adjusts a specific customer's liability, but need not reference one particular
   invoice (a discount can cover an account's overall history). When `salesInvoiceId` is
-  set, `customerId` must match that invoice's own customer (validated server-side); a
-  `WALK_IN`-mode invoice has no customer to link a Credit Note's `customerId` to, so
-  Credit Notes referencing a `WALK_IN` invoice are rejected (use `CASH_REFUND` on a Sales
-  Return instead — spec 39).
+  set, `customerId` must match that invoice's own customer (validated server-side), and
+  the referenced invoice's `status` must be `POSTED` — a `DRAFT` invoice has no committed
+  financial effect yet to adjust, and a `CANCELLED` invoice's effect has already been
+  reversed, so linking either is rejected as a friendly validation error, not silently
+  allowed. A `WALK_IN`-mode invoice has no customer to link a Credit Note's `customerId`
+  to, so Credit Notes referencing a `WALK_IN` invoice are rejected (use `CASH_REFUND` on a
+  Sales Return instead — spec 39).
 - **Line shape is freeform** (`description` + `taxableAmount` + `ratePercent`/
   `cessPercent` entered or picked directly from a `GstRate`), not derived from a product
   or invoice line — deliberately looser than Sales Return's product-anchored lines,
@@ -153,17 +156,22 @@ Decisions
 
 - **Editable while `DRAFT`.** Posting freezes the document.
 - **Posting (`postCreditNote`, one transaction)**:
-  1. Recompute each line's tax via `gstEngine.calculateLine` (using this note's own
+  1. If `salesInvoiceId` is set, re-verify (against current state, not the state when
+     this note was drafted) that the invoice's `status` is still `POSTED` and its
+     customer still matches this note's `customerId` — reject otherwise, since the
+     invoice may have been cancelled, or a mismatch introduced, since this note was
+     created as a `DRAFT`.
+  2. Recompute each line's tax via `gstEngine.calculateLine` (using this note's own
      `placeOfSupplyStateCode` → `determineSupplyType`, since a Credit Note with no
      linked invoice has no invoice-level supply type to inherit; when
      `salesInvoiceId` is set, default this field from that invoice's own
      `placeOfSupplyStateCode` but still allow override — a post-sale adjustment can
      legitimately use a different place of supply than the original sale in edge cases,
      though this is rare).
-  2. Generate `noteNumber` (`DocumentType.CREDIT_NOTE`, spec 34's two-step contract).
-  3. Build the balanced voucher (see Ledger Posting) and call `voucherEngine.postVoucher`
+  3. Generate `noteNumber` (`DocumentType.CREDIT_NOTE`, spec 34's two-step contract).
+  4. Build the balanced voucher (see Ledger Posting) and call `voucherEngine.postVoucher`
      (`VoucherType.CREDIT_NOTE`).
-  4. Set `status = POSTED`, `voucherId`. **No Inventory Engine call ever.**
+  5. Set `status = POSTED`, `voucherId`. **No Inventory Engine call ever.**
 - **Ledger Posting**: **Debit** `CompanySettings.salesLedgerId` for `taxableAmount` and
   the applicable output-tax ledgers for their totals (reusing spec 38's mapping and its
   missing-mapping rejection). **Credit** the customer's Ledger (`LEDGER_ADJUSTMENT`) or
@@ -197,7 +205,8 @@ src/types/credit-note.ts
 # Validation
 
 Zod (`credit-note-schema.ts`): `customerId` uuid, `salesInvoiceId` optional uuid (server
-verifies the customer match when present), `placeOfSupplyStateCode` against
+verifies the customer match and that the invoice's `status` is `POSTED` when present),
+`placeOfSupplyStateCode` against
 `GST_STATE_CODES`, `noteDate` calendar date, `reason` required non-empty ≤ 500,
 `refundMode`/`refundLedgerId` refine identical to spec 39, lines array ≥ 1
 (`description` non-empty ≤ 200, `taxableAmount` > 0 ≤ 2 decimals, `ratePercent` 0–100 ≤ 2
@@ -275,7 +284,8 @@ Verify
   `VoucherType.CREDIT_NOTE` voucher and **no** `StockTransaction` row (grep confirms no
   Inventory Engine import in this module).
 - A Credit Note referencing a `WALK_IN`-mode invoice is rejected; a customer/invoice
-  mismatch is rejected.
+  mismatch is rejected; a Credit Note referencing a `DRAFT` or `CANCELLED` invoice is
+  rejected, both at draft-creation time and re-checked at posting time.
 - Cancelling a posted Credit Note produces a correct mirrored voucher reversal.
 - `npx tsc --noEmit`, `npx eslint src prisma`, `npx vitest run`, and `next build` all
   pass; `/sales/credit-notes*` appears in the build route table.

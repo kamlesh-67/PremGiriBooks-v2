@@ -148,8 +148,12 @@ Decisions
   in this phase (Purchase Return, spec 45, operates against a *posted invoice*, not a
   GRN).
 - `purchaseOrderId` optional at the header (a GRN may be raised directly with no prior
-  order); `purchaseOrderItemId` per line when linked, validated against the same order
-  (no consolidated GRN across multiple orders — Do Not).
+  order). **When set, the GRN's `supplierId` must equal that Purchase Order's own
+  `supplierId`** (rejected as a mismatch otherwise — a GRN cannot claim to receive
+  against a different supplier's order). `purchaseOrderItemId` per line when linked,
+  validated against that same order (no consolidated GRN across multiple orders — Do
+  Not), **and the referenced `PurchaseOrderItem.productId` must equal this GRN line's own
+  `productId`** — a line cannot be linked to an order item for a different product.
 - `purchaseInvoice` back-relation is 1:1, same simplification as Delivery Challan's.
 
 ---
@@ -160,13 +164,19 @@ Decisions
 - **Receiving a GRN**, in one transaction:
   1. Validates every line's product/warehouse belong to the company and are active.
   2. If `purchaseOrderId` is set, calls `purchaseOrderService.applyReceipt
-     (purchaseOrderId, lines, tx)` (spec 42) with this GRN's own transaction client.
+     (purchaseOrderId, lines, tx)` (spec 42) with this GRN's own transaction client,
+     passing each line's **combined `quantity + rejectedQuantity`** as the fulfillment
+     amount `applyReceipt` adds to `receivedQuantity` — not `quantity` alone, consistent
+     with the Quantity rule above.
   3. Sets `status = RECEIVED`.
   4. **Does not call the Inventory Engine** (see Goal).
-- **Quantity rule**: when linked to a Purchase Order, a line's `quantity` (received, not
-  rejected) must not exceed that order line's remaining quantity
-  (`purchaseOrderItem.quantity − purchaseOrderItem.receivedQuantity`) at receiving time,
-  re-checked inside the transaction (the same race-guard pattern as Delivery Challan).
+- **Quantity rule**: when linked to a Purchase Order, a line's **combined**
+  `quantity + rejectedQuantity` must not exceed that order line's remaining quantity
+  (`purchaseOrderItem.quantity − purchaseOrderItem.receivedQuantity`) at receiving time —
+  both figures represent goods that physically arrived (per the Data Model's
+  `rejectedQuantity` rationale), so both consume the order's remaining quantity, even
+  though only `quantity` is ever billed. Re-checked inside the transaction (the same
+  race-guard pattern as Delivery Challan).
 - **Status transitions**: `DRAFT → RECEIVED` (Receive), `RECEIVED → INVOICED`
   (automatic, set when a Purchase Invoice referencing this GRN is posted — spec 44's
   responsibility), `DRAFT → CANCELLED` (Cancel, only while `DRAFT` — a `RECEIVED` GRN
@@ -208,8 +218,9 @@ Zod (`goods-receipt-note-schema.ts`): `supplierId` uuid, `purchaseOrderId` optio
 `grnDate` calendar date, `narration` ≤ 500, lines array ≥ 1 with `productId`/
 `warehouseId` uuid, `quantity` > 0 honoring the product unit's decimal precision,
 `rejectedQuantity` ≥ 0 with the same precision, `purchaseOrderItemId` optional uuid
-(server re-verifies it belongs to the referenced `purchaseOrderId` when both are
-present).
+(server re-verifies it belongs to the referenced `purchaseOrderId`, that the order's
+`supplierId` matches this GRN's own `supplierId`, and that the referenced item's
+`productId` matches this line's `productId`, when both are present).
 
 ---
 

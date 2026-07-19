@@ -126,10 +126,16 @@ Decisions (differences from `40-credit-note.md` only)
 Identical structure to `40-credit-note.md`'s, with the ledger direction reversed:
 
 - Editable while `DRAFT`; posting freezes the document.
-- **Posting (`postDebitNote`, one transaction)**: recompute each line's tax via
-  `gstEngine.calculateLine` (same `placeOfSupplyStateCode` sourcing rule as Credit
-  Note), generate `noteNumber` (`DocumentType.DEBIT_NOTE`), build the balanced voucher,
-  call `voucherEngine.postVoucher` (`VoucherType.DEBIT_NOTE`), set `status = POSTED` +
+- When `salesInvoiceId` is set, the referenced invoice's `status` must be `POSTED` (a
+  `DRAFT` or `CANCELLED` invoice is rejected as a link target, identical reasoning to
+  Credit Note) — checked at draft-creation time and re-verified again at posting time
+  against current state, since the invoice may be cancelled in between.
+- **Posting (`postDebitNote`, one transaction)**: if `salesInvoiceId` is set, re-verify
+  its `status` is still `POSTED` and its customer still matches this note's `customerId`
+  — reject otherwise; then recompute each line's tax via `gstEngine.calculateLine` (same
+  `placeOfSupplyStateCode` sourcing rule as Credit Note), generate `noteNumber`
+  (`DocumentType.DEBIT_NOTE`), build the balanced voucher, call
+  `voucherEngine.postVoucher` (`VoucherType.DEBIT_NOTE`), set `status = POSTED` +
   `voucherId`. **No Inventory Engine call ever.**
 - **Ledger Posting** (the reversal of Credit Note's): **Debit** the customer's Ledger for
   `grandTotal`. **Credit** `CompanySettings.salesLedgerId` for `taxableAmount` and the
@@ -244,7 +250,8 @@ Verify
   ledger direction reversed from Credit Note (Debit customer, Credit Sales/Output-tax)
   and **no** `StockTransaction` row.
 - A Debit Note referencing a `WALK_IN`-mode invoice is rejected; a customer/invoice
-  mismatch is rejected.
+  mismatch is rejected; a Debit Note referencing a `DRAFT` or `CANCELLED` invoice is
+  rejected, both at draft-creation time and re-checked at posting time.
 - Cancelling a posted Debit Note produces a correct mirrored voucher reversal.
 - `npx tsc --noEmit`, `npx eslint src prisma`, `npx vitest run`, and `next build` all
   pass; `/sales/debit-notes*` appears in the build route table.
