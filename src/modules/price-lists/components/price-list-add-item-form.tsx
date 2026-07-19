@@ -32,9 +32,12 @@ interface PriceListAddItemFormProps {
   products: ProductOptionItem[];
 }
 
-const EMPTY_VALUES: PriceListItemInput = {
+// sellingPrice is a required number in PriceListItemInput, but the form
+// should start blank rather than pre-filled with 0 — a Partial keeps the
+// omission type-safe instead of casting `undefined as unknown as number`.
+const EMPTY_VALUES: Partial<PriceListItemInput> = {
   productId: "",
-  sellingPrice: undefined as unknown as number,
+  sellingPrice: undefined,
   minQuantity: undefined,
 };
 

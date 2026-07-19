@@ -66,6 +66,15 @@ function toPriceListItemWithProduct(raw: PriceListItemRow): PriceListItemWithPro
   };
 }
 
+// Matches the persistence-side normalization (price-list-service.ts's
+// toDate(), and financial-year-schema.ts's identical convention) — a caller
+// passing a `Date` with a real time-of-day (e.g. `new Date()`) must not
+// under/over-match against the `@db.Date` columns, which are always stored
+// at UTC midnight.
+function toUtcMidnight(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
 function buildWhere(
   companyId: string,
   filters: PriceListListFilters
@@ -311,9 +320,10 @@ export const priceListRepository = {
     }
 
     if (criteria.effectiveDate) {
+      const effectiveDate = toUtcMidnight(criteria.effectiveDate);
       where.AND = [
-        { OR: [{ effectiveFrom: null }, { effectiveFrom: { lte: criteria.effectiveDate } }] },
-        { OR: [{ effectiveTo: null }, { effectiveTo: { gte: criteria.effectiveDate } }] },
+        { OR: [{ effectiveFrom: null }, { effectiveFrom: { lte: effectiveDate } }] },
+        { OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveDate } }] },
       ];
     }
 
