@@ -65,7 +65,7 @@ Implement all master data and shared business engines required by transactional 
 
 Phase Status
 
-🟨 In Progress — Accounting Foundation group complete (all 5 implemented as of 2026-07-14). Inventory Masters group complete (all 7 implemented as of 2026-07-18): Unit Management (#17, `context/feature-specs/19-unit-management.md`) implemented 2026-07-14; Category Management (#18, `context/feature-specs/20-category-management.md`) implemented 2026-07-15; Brand Management (#19, `context/feature-specs/21-brand-management.md`) implemented 2026-07-15; HSN Management (#20, `context/feature-specs/22-hsn-management.md`) implemented 2026-07-15; GST Rate Management (#21, `context/feature-specs/23-gst-rate-management.md`) implemented 2026-07-15; Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) implemented 2026-07-18; Product Management (#23, `context/feature-specs/25-product-management.md`) implemented 2026-07-18. Business Parties group complete (both implemented as of 2026-07-19): Customer Management (#24, `context/feature-specs/26-customer-management.md`) implemented 2026-07-19; Supplier Management (#25, `context/feature-specs/27-supplier-management.md`) implemented 2026-07-19. Pricing group complete (all 3 implemented 2026-07-19): Margin Profiles (#26), Price Lists (#27), Pricing Engine (#28). Shared ERP Engines group in progress — Voucher Engine (#29) and Document Number Engine (#32) implemented 2026-07-19, Inventory Engine (#30) implemented 2026-07-19; GST Engine (#31) remains ⬜.
+✅ Completed — Accounting Foundation group complete (all 5 implemented as of 2026-07-14). Inventory Masters group complete (all 7 implemented as of 2026-07-18): Unit Management (#17, `context/feature-specs/19-unit-management.md`) implemented 2026-07-14; Category Management (#18, `context/feature-specs/20-category-management.md`) implemented 2026-07-15; Brand Management (#19, `context/feature-specs/21-brand-management.md`) implemented 2026-07-15; HSN Management (#20, `context/feature-specs/22-hsn-management.md`) implemented 2026-07-15; GST Rate Management (#21, `context/feature-specs/23-gst-rate-management.md`) implemented 2026-07-15; Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) implemented 2026-07-18; Product Management (#23, `context/feature-specs/25-product-management.md`) implemented 2026-07-18. Business Parties group complete (both implemented as of 2026-07-19): Customer Management (#24, `context/feature-specs/26-customer-management.md`) implemented 2026-07-19; Supplier Management (#25, `context/feature-specs/27-supplier-management.md`) implemented 2026-07-19. Pricing group complete (all 3 implemented 2026-07-19): Margin Profiles (#26), Price Lists (#27), Pricing Engine (#28). Shared ERP Engines group complete (all 4 implemented 2026-07-19): Voucher Engine (#29), Inventory Engine (#30), Document Number Engine (#32), and GST Engine (#31) — the last of the four. Phase 2 is now fully complete.
 
 ---
 
@@ -152,10 +152,10 @@ first, for `Customer.priceListId`):
 
 ## Shared ERP Engines
 
-Feature-specs for all four items were drafted 2026-07-18. Document Number Engine (#32),
-Voucher Engine (#29), and Inventory Engine (#30) are implemented (all 2026-07-19); GST
-Engine (#31) remains unimplemented — it is independent of the other three. Specs 31 and
-34 deliberately exclude the branch dimension while Branch Management (feature-spec 12)
+Feature-specs for all four items were drafted 2026-07-18. All four are now implemented
+(2026-07-19): Document Number Engine (#32), Voucher Engine (#29), Inventory Engine (#30),
+and GST Engine (#31) — the last to land, independent of the other three. Specs 31 and 34
+deliberately exclude the branch dimension while Branch Management (feature-spec 12)
 remains unimplemented — each records a forward-note migration:
 
 | Tracker # | Feature                | Spec file                                              |
@@ -169,7 +169,7 @@ remains unimplemented — each records a forward-note migration:
 | --- | ---------------------- | --------------------------------------------------- | ------ |
 | 29  | Voucher Engine         | Ledger Master                                       | ✅     |
 | 30  | Inventory Engine       | Products + Warehouse                                | ✅     |
-| 31  | GST Engine             | GST Rates + HSN                                     | ⬜     |
+| 31  | GST Engine             | GST Rates + HSN                                     | ✅     |
 | 32  | Document Number Engine | Company + Financial Year (branch dimension deferred — see spec 34) | ✅     |
 
 ---
