@@ -3,37 +3,42 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // product-repository.ts's update() opens its own transaction via
 // runInTransaction, which drives the real "@/lib/prisma" module's
 // `$transaction` — mock it to hand the callback a fake tx object instead of
-// hitting a real database (voucher-engine.test.ts's convention).
-const FAKE_TX = {
-  product: {
-    findUnique: vi.fn(),
-    update: vi.fn(),
+// hitting a real database (voucher-engine.test.ts's convention). FAKE_TX must
+// be built inside vi.hoisted() since the vi.mock factory below is hoisted
+// above ordinary module-scope declarations and would otherwise close over an
+// uninitialized binding.
+const { FAKE_TX } = vi.hoisted(() => ({
+  FAKE_TX: {
+    product: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    stockTransaction: {
+      findFirst: vi.fn(),
+    },
+    unit: {
+      findUnique: vi.fn(),
+    },
+    category: {
+      findUnique: vi.fn(),
+    },
+    brand: {
+      findUnique: vi.fn(),
+    },
+    hsnCode: {
+      findUnique: vi.fn(),
+    },
+    gstRate: {
+      findUnique: vi.fn(),
+    },
+    warehouse: {
+      findUnique: vi.fn(),
+    },
+    marginProfile: {
+      findUnique: vi.fn(),
+    },
   },
-  stockTransaction: {
-    findFirst: vi.fn(),
-  },
-  unit: {
-    findUnique: vi.fn(),
-  },
-  category: {
-    findUnique: vi.fn(),
-  },
-  brand: {
-    findUnique: vi.fn(),
-  },
-  hsnCode: {
-    findUnique: vi.fn(),
-  },
-  gstRate: {
-    findUnique: vi.fn(),
-  },
-  warehouse: {
-    findUnique: vi.fn(),
-  },
-  marginProfile: {
-    findUnique: vi.fn(),
-  },
-};
+}));
 
 vi.mock("@/lib/prisma", () => ({
   prisma: { $transaction: (fn: (tx: unknown) => unknown) => fn(FAKE_TX) },

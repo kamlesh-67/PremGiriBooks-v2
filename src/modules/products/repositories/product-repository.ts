@@ -1,9 +1,9 @@
-import type { Prisma, ProductType } from "@prisma/client";
+import { Prisma, type ProductType } from "@prisma/client";
 
 import { AppError } from "@/lib/app-error";
 import { prisma } from "@/lib/prisma";
 import { runInTransaction } from "@/lib/transaction";
-import { isRecordNotFoundError } from "@/lib/prisma-errors";
+import { isRecordNotFoundError, isRetryableTransactionError } from "@/lib/prisma-errors";
 import type {
   ActivateProductResult,
   DeactivateProductResult,
@@ -97,6 +97,27 @@ function assertMinStockLevelPrecision(minStockLevel: number, decimalPlaces: numb
     );
   }
 }
+
+// The immutability check below is a read-then-write invariant (read
+// "does any StockTransaction exist for this product" then write the
+// product) exactly like warehouse-repository.ts's one-default-per-company
+// flag — a plain Read Committed transaction lets a concurrent Inventory
+// Engine movement batch that itself opened a Serializable transaction
+// (recordMovements — any batch containing an OUT line) race past this
+// check unnoticed. Serializable isolation + bounded P2034 retry on BOTH
+// sides is required for Postgres to actually detect that conflict; this
+// closes the race against any concurrent OUT-containing movement batch.
+// An IN-only movement batch (e.g. a lone OPENING_STOCK/PURCHASE line) does
+// NOT open a Serializable transaction by the Inventory Engine's own design
+// (32-inventory-engine.md: "IN-only batches need no Serializable
+// isolation") — a product edit racing the very first, IN-only movement for
+// that product remains a narrower, unprotected window, same accepted-risk
+// posture as this file's other "no invariant to guard" reference checks.
+const SERIALIZABLE_RETRY = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  retryable: isRetryableTransactionError,
+  conflictMessage: "This product was changed by another request. Please try again.",
+};
 
 /**
  * Once the Inventory Engine has recorded any movement for a product,
@@ -361,7 +382,7 @@ export const productRepository = {
         }
         throw error;
       }
-    });
+    }, SERIALIZABLE_RETRY);
   },
 
   async activate(id: string, companyId: string): Promise<ActivateProductResult> {
