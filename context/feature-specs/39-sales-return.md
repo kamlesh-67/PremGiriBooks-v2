@@ -99,7 +99,7 @@ model SalesReturn {
   company         Company           @relation(fields: [companyId], references: [id])
   financialYearId String
   financialYear   FinancialYear     @relation(fields: [financialYearId], references: [id])
-  returnNumber    String
+  returnNumber    String?           // null until posted, see Decisions
   returnDate      DateTime          @db.Date
   salesInvoiceId  String
   salesInvoice    SalesInvoice      @relation(fields: [salesInvoiceId], references: [id])
@@ -144,6 +144,7 @@ model SalesReturnItem {
   totalAmount        Decimal     @db.Decimal(14, 2)
 
   @@unique([salesReturnId, lineNumber])
+  @@unique([salesReturnId, salesInvoiceItemId])
   @@index([salesInvoiceItemId])
 }
 ```
@@ -155,6 +156,11 @@ Decisions
   the **overridden** tax values when the source line was tax-overridden, per spec 38's
   audit trail) — a return cannot invent a different price or tax treatment than what was
   actually invoiced. Only `quantity` (≤ the returnable remainder) is entered.
+  `@@unique([salesReturnId, salesInvoiceItemId])` prevents the same invoice line from
+  being listed twice within one return (which would otherwise let the returnable-quantity
+  math and the stock/voucher posting both process one invoice line as two independent
+  entries) — a business returning more of the same line simply increases that one line's
+  `quantity`, not adds a second row for the same `salesInvoiceItemId`.
 - **`refundMode`** — `LEDGER_ADJUSTMENT` (the Prisma column default, for the common
   `PERMANENT`/converted-`QUICK`-source case): reduces the customer's outstanding ledger
   balance, no cash moves. `CASH_REFUND`: cash/bank actually leaves the business, requiring
@@ -168,6 +174,15 @@ Decisions
   regardless of the Prisma default or any client-supplied value — an explicit
   `LEDGER_ADJUSTMENT` submitted for a `WALK_IN`-sourced return is rejected outright (not
   silently overridden), matching the Business Rules enforcement below.
+- **`returnNumber` is nullable, assigned only at posting** — a `DRAFT` Sales Return has
+  no committed identity yet (the Document Number Engine's `generateNumber` step runs
+  inside `postSalesReturn`'s own transaction, per spec 34's contract, not at
+  `createDraft` time — the same lifecycle `44-purchase-invoice.md`'s `invoiceNumber`
+  follows). The `@@unique([companyId, financialYearId, returnNumber])` constraint still
+  holds correctly with multiple `DRAFT` rows coexisting, since Postgres unique indexes
+  treat `NULL` values as distinct from one another — not a gap in the constraint, exactly
+  why the column can stay nullable without risking a false collision. `createDraft` and
+  `updateDraft` never set `returnNumber`; `postSalesReturn` is the only writer.
 - **No `branchId`**, same posture as every spec in this phase.
 
 ---
@@ -177,6 +192,12 @@ Decisions
 - **Requires a `POSTED` Sales Invoice** — `salesInvoiceId` must reference an invoice with
   `status = POSTED` belonging to the same company; a `DRAFT`/`CANCELLED` invoice is
   rejected as not-returnable.
+- **Line/header consistency**: every `SalesReturnItem.salesInvoiceItemId` must belong to
+  the header's own `salesInvoiceId` and the same company — validated server-side before
+  computing returnable quantities, stock movements, or voucher entries; a line
+  referencing a different invoice's item is rejected outright (this guards against a
+  client submitting an item id from an unrelated invoice, not just a trusted
+  assumption).
 - **Returnable quantity**: for each `salesInvoiceItemId`, the maximum returnable quantity
   is `salesInvoiceItem.quantity − Σ(quantity of prior SalesReturnItems whose parent
   SalesReturn has status = POSTED, against that same salesInvoiceItemId)`. **`DRAFT`
@@ -197,17 +218,26 @@ Decisions
   `POSTED`-or-later return's id.
 - **Posting (`postSalesReturn`, one transaction)**: mirrors `38-sales-invoice.md`'s
   posting orchestration with the direction reversed —
-  1. Re-validate returnable quantity against current state.
-  2. Recompute each line's taxable/tax amounts from the source invoice line's per-unit
+  1. Inside the same Serializable transaction as the returnable-quantity check (not a
+     separate pre-check that could go stale before the transaction opens): re-verify the
+     source invoice's `status` is still `POSTED` (it may have been cancelled since this
+     return was drafted); re-verify every line's `salesInvoiceItemId` still belongs to
+     `salesInvoiceId` and the same company (the Line/header consistency rule above,
+     re-checked against current state, not just at draft-creation time); when
+     `refundMode = CASH_REFUND`, re-verify `refundLedgerId` is still active and
+     company-owned. Reject on any failure before computing returnable quantity.
+  2. Re-validate returnable quantity against current state.
+  3. Recompute each line's taxable/tax amounts from the source invoice line's per-unit
      rate/tax (its **overridden** values when applicable) × returned quantity, rounded
      per the GST Engine's own per-line rounding policy.
-  3. Generate `returnNumber` (`DocumentType.SALES_RETURN`, spec 34's two-step contract).
-  4. `inventoryEngine.recordMovements(companyId, lines, tx)` —
+  4. Generate `returnNumber` (`DocumentType.SALES_RETURN`, spec 34's two-step contract)
+     — the first time this row receives a real number (see Decisions).
+  5. `inventoryEngine.recordMovements(companyId, lines, tx)` —
      `StockTransactionType.SALES_RETURN`/`IN`, one line per returned item,
      `referenceType = "SALES_RETURN"`, same `warehouseId` the original invoice line used.
-  5. Build the balanced voucher (see Ledger Posting) and call `voucherEngine.postVoucher`
+  6. Build the balanced voucher (see Ledger Posting) and call `voucherEngine.postVoucher`
      (`VoucherType.SALES_RETURN`).
-  6. Set `status = POSTED`, `voucherId`.
+  7. Set `status = POSTED`, `voucherId`.
 - **Ledger Posting**: **Debit** `CompanySettings.salesLedgerId` for the returned
   `taxableAmount` and `outputCgstLedgerId`/`outputSgstLedgerId`/`outputIgstLedgerId`/
   `outputCessLedgerId` for their respective returned totals (reusing
@@ -328,8 +358,18 @@ Do not implement
 
 Verify
 
+- A `SalesReturnItem` referencing a `salesInvoiceItemId` that does not belong to the
+  header's own `salesInvoiceId` is rejected outright; the same `salesInvoiceItemId`
+  cannot appear twice within one return (`@@unique([salesReturnId, salesInvoiceItemId])`).
+  A `DRAFT` Sales Return persists with `returnNumber = null`; multiple `DRAFT` returns
+  coexist without a unique-constraint conflict; posting assigns the first real
+  `returnNumber`.
 - A Sales Return against a posted invoice caps each line at its correctly-computed
   remaining returnable quantity, including across two sequential partial returns.
+- Posting is rejected if the source invoice was cancelled after this return was drafted,
+  or if a `CASH_REFUND`'s `refundLedgerId` was deactivated in the meantime — both
+  re-checked inside the same Serializable posting transaction, not just at
+  draft-creation time.
 - Posting produces a balanced `VoucherType.SALES_RETURN` voucher and a matching
   `StockTransactionType.SALES_RETURN`/`IN` stock transaction per line, atomically.
 - A `WALK_IN`-sourced return is forced to `CASH_REFUND` and requires a `refundLedgerId`;

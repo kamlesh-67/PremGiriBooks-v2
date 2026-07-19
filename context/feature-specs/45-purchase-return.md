@@ -132,6 +132,7 @@ model PurchaseReturnItem {
   totalAmount           Decimal        @db.Decimal(14, 2)
 
   @@unique([purchaseReturnId, lineNumber])
+  @@unique([purchaseReturnId, purchaseInvoiceItemId])
   @@index([purchaseInvoiceItemId])
 }
 ```
@@ -142,7 +143,10 @@ Decisions
   `purchaseInvoiceId`/`purchaseInvoiceItemId` in place of `salesInvoiceId`/
   `salesInvoiceItemId` — no independent product/rate entry, every line derives its
   rate/tax from the source invoice line (using overridden values when applicable),
-  only `quantity` is entered.
+  only `quantity` is entered. `@@unique([purchaseReturnId, purchaseInvoiceItemId])`
+  mirrors spec 39's identical constraint, for the identical reason — the same invoice
+  line cannot be listed twice within one return; returning more of the same line
+  increases that one line's `quantity` instead.
 - **`refundMode`/`refundLedgerId`** — reuses spec 39's `RefundMode` enum. Here,
   `LEDGER_ADJUSTMENT` reduces what the business owes the supplier (Sundry Creditors);
   `CASH_REFUND` models the supplier actually returning cash/bank funds to the business

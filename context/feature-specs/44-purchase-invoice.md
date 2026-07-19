@@ -262,25 +262,37 @@ called out here)
 Mirrors `38-sales-invoice.md`'s orchestration exactly, direction adjusted:
 
 1. Re-validate every business rule against current state (active supplier/product/
-   warehouse, FY open, HSN present, all five new ledger mappings + the shared round-off
-   mapping configured, linked GRN still `RECEIVED` and unclaimed). **When
+   warehouse, FY open, HSN present, all six ledger mappings validated — see Ledger
+   Mapping Validation below, linked GRN still `RECEIVED` and unclaimed). **When
    `goodsReceiptNoteId` is set, also verify identity/line consistency**: the GRN's
    `supplierId` must equal this invoice's own `supplierId`, its `companyId` must match,
    and if both `purchaseOrderId` and the GRN's own `purchaseOrderId` are present they
-   must agree; every invoice line's `productId` and `quantity` must match one of the
-   GRN's own lines exactly (one invoice line per GRN line, quantity equal — splitting or
-   partially invoicing a GRN line is not allowed in this phase). Any mismatch rejects
-   posting with a friendly, line-specific error, before any stock or voucher entry is
-   created.
+   must agree. **Line matching is on the `(productId, warehouseId, quantity)` triple, not
+   `productId`/`quantity` alone** — a GRN can legitimately carry two lines for the same
+   product received into different warehouses, or (more rarely) two identical-looking
+   lines for the same product/warehouse/quantity; matching on `productId`/`quantity`
+   alone could match either one ambiguously. Each invoice line is matched **1:1** against
+   exactly one GRN line — the match is validated as a bijection (every GRN line consumed
+   by at most one invoice line, every invoice line matching exactly one GRN line, the
+   invoice's own line count equal to the GRN's), not a lookup that stops at the first
+   candidate — so a GRN carrying duplicate `(productId, warehouseId, quantity)` lines
+   still resolves deterministically. Any mismatch rejects posting with a friendly,
+   line-specific error, before any stock or voucher entry is created.
 2. Recompute `calculateDocument` from current lines (never trust stale draft totals).
-3. Generate `invoiceNumber` (`ensureSequence`/`generateNumber`, spec 34's contract) — the
+3. **Validate payments against this just-recomputed total, not a stale draft total**:
+   `Σ payments ≤ grandTotal` — an overpayment is rejected here, before any further step.
+   Set `amountPaid = Σ payments` (never entered independently — always derived from the
+   payment rows, the same "no independently-editable derived field" posture as every
+   other computed total in this project); the supplier's remainder,
+   `grandTotal − amountPaid`, is guaranteed non-negative by this check.
+4. Generate `invoiceNumber` (`ensureSequence`/`generateNumber`, spec 34's contract) — the
    first time this row receives a real number (see Decisions).
-4. `inventoryEngine.recordMovements(companyId, lines, tx)` —
+5. `inventoryEngine.recordMovements(companyId, lines, tx)` —
    `StockTransactionType.PURCHASE`/`IN`, `referenceType = "PURCHASE_INVOICE"`.
-5. Build the balanced voucher (see Ledger Posting) and call `voucherEngine.postVoucher`
+6. Build the balanced voucher (see Ledger Posting) and call `voucherEngine.postVoucher`
    (`VoucherType.PURCHASE`).
-6. If `goodsReceiptNoteId` is set, call `goodsReceiptNoteService.markInvoiced(id, tx)`.
-7. Set `status = POSTED`, `voucherId`.
+7. If `goodsReceiptNoteId` is set, call `goodsReceiptNoteService.markInvoiced(id, tx)`.
+8. Set `status = POSTED`, `voucherId`.
 
 ## Ledger Posting (the reversal of Sales Invoice's)
 
@@ -303,6 +315,16 @@ Mirrors `38-sales-invoice.md`'s orchestration exactly, direction adjusted:
 - **Balance holds by construction**, identical reasoning to Sales Invoice.
 - **No "walk-in must pay in full" equivalent** — every Purchase Invoice has a real
   Supplier Ledger to carry a remainder, unlike Sales Invoice's `WALK_IN` edge case.
+- **Ledger Mapping Validation** (all six ledgers — the five new fields plus the shared
+  `roundOffLedgerId`): posting checks each configured ledger id is not merely non-null but
+  currently **active**, **owned by the current company**, and assigned to the **expected
+  ledger group** for its role — `purchaseLedgerId` under "Purchase Accounts" (or a
+  descendant), `inputCgstLedgerId`/`inputSgstLedgerId`/`inputIgstLedgerId`/
+  `inputCessLedgerId` under "Duties & Taxes" (or a descendant), `roundOffLedgerId` any
+  active company ledger (no fixed group, per spec 38's original decision, reused here).
+  A mapping pointing at an inactive, cross-company, or wrong-group ledger is treated
+  identically to a missing one — rejected with the same friendly, mapping-specific error
+  naming which of the six failed — never silently posted against the wrong account.
 
 ## Cancellation
 
@@ -345,10 +367,20 @@ Zod (`purchase-invoice-schema.ts`): `supplierId` uuid, `supplierInvoiceNumber` r
 non-empty ≤ 50 (server checks the per-supplier uniqueness), `placeOfSupplyStateCode`
 against `GST_STATE_CODES`, `invoiceDate` calendar date, `narration` ≤ 500, lines array
 ≥ 1 (`productId`/`warehouseId` uuid, `quantity` > 0 with unit precision, `rate` ≥ 0 ≤ 2
-decimals, discount fields as prior specs, `overrideReason` required non-empty ≤ 500 when
-overridden), payments array (`ledgerId` uuid — server re-verifies it is active,
-company-owned, and either the Cash-in-Hand ledger or a `BankAccount`-linked ledger,
-rejecting any other ledger type — `amount` > 0 ≤ 2 decimals).
+decimals, discount fields as prior specs, `ratePercent`/`cessPercent` 0–100 with ≤ 2
+decimals — mirrors the GST Engine's own `GstRate` bounds (spec 33); these are normally
+server-populated from the product's rate rather than client-authored, but are validated
+here too, defensively, since the schema accepts the full line payload.
+`overriddenCgst`/`overriddenSgst`/`overriddenIgst`/`overriddenCess` each ≥ 0 with ≤ 2
+decimals when present, `overrideReason` required non-empty ≤ 500 when any overridden
+field is set — an object-level refine ties `isTaxOverridden`, `overrideReason`, and the
+overridden fields together: **exactly one** of the intra-state pair
+(`overriddenCgst` + `overriddenSgst`) or the inter-state field (`overriddenIgst`) may be
+set on a given line, never both pairs at once, and an overridden field may never appear
+with `isTaxOverridden` left false or `overrideReason` blank), payments array (`ledgerId`
+uuid — server re-verifies it is active, company-owned, and either the Cash-in-Hand
+ledger or a `BankAccount`-linked ledger, rejecting any other ledger type — `amount` > 0
+≤ 2 decimals).
 
 ---
 
@@ -409,8 +441,11 @@ Same as spec 38: strict TypeScript, no `any`, no arithmetic outside its owning e
 Serializable transaction for posting, vitest coverage for: the full posting
 orchestration (entry balancing across payment-split combinations, both round-off
 directions), tax-override audit trail, HSN hard-block, cancellation's mirrored reversal,
-missing-ledger-mapping rejection (five new fields + the shared round-off field),
-`supplierInvoiceNumber` per-supplier uniqueness rejection.
+ledger-mapping rejection matrix — missing, inactive, cross-company, and wrong-group,
+one case per each of the five new fields plus the shared round-off field —
+`supplierInvoiceNumber` per-supplier uniqueness rejection, the GRN line-matching
+bijection (including the duplicate-`(productId, warehouseId, quantity)`-lines case), and
+payment-overpayment rejection against the freshly recomputed `grandTotal`.
 
 ---
 
@@ -436,12 +471,20 @@ Verify
   round-off direction) and a matching `StockTransactionType.PURCHASE`/`IN` stock
   transaction per line, atomically.
 - A tax override stores both computed and overridden values, uses the overridden values
-  in the posted voucher, and requires a non-empty reason.
+  in the posted voucher, and requires a non-empty reason; a negative or over-precision
+  override amount, or an override setting both the intra-state pair and the inter-state
+  field at once, is rejected.
 - A taxed line with no HSN blocks posting unconditionally.
 - Duplicate `(supplierId, supplierInvoiceNumber)` is rejected with a friendly error.
 - A Purchase Invoice linked to a Goods Receipt Note is rejected before posting if the
   GRN's supplier, company, or linked purchase order disagrees with the invoice's own, or
-  if any invoice line's product/quantity doesn't match the GRN's lines exactly.
+  if any invoice line's product/warehouse/quantity doesn't match the GRN's lines exactly
+  as a 1:1 bijection — including a GRN with duplicate `(productId, warehouseId,
+  quantity)` lines, which still resolves deterministically rather than matching
+  ambiguously.
+- An overpayment (`Σ payments > grandTotal`, checked against the freshly recomputed
+  total) is rejected before any engine call; `amountPaid` always equals `Σ payments`,
+  never an independently entered value.
 - A payment ledger that is neither the Cash-in-Hand ledger nor a `BankAccount`-linked
   ledger is rejected.
 - A `DRAFT` Purchase Invoice persists with `invoiceNumber = null`; multiple `DRAFT`
@@ -449,8 +492,9 @@ Verify
   `invoiceNumber`.
 - Cancelling a posted invoice produces a correct mirrored voucher reversal and matching
   reversed stock transaction.
-- Missing any of the five new Company Settings ledger mappings (or the shared Round Off
-  mapping) blocks posting with a specific, friendly error.
+- Missing, inactive, cross-company, or wrong-group any of the five new Company Settings
+  ledger mappings (or the shared Round Off mapping) blocks posting with a specific,
+  friendly error naming which mapping failed and why.
 - `npx tsc --noEmit`, `npx eslint src prisma`, `npx vitest run`, and `next build` all
   pass; `/purchase/invoices*` and the extended Settings route appear in the build route
   table.
