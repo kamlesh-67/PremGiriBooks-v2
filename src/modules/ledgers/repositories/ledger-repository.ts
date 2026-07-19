@@ -74,16 +74,17 @@ function buildWhere(companyId: string, filters: LedgerListFilters): Prisma.Ledge
 }
 
 /** Which detail-row module owns a Ledger, if any — see findDetailLink. */
-export type LedgerDetailLink = "bankAccount" | "customer";
+export type LedgerDetailLink = "bankAccount" | "customer" | "supplier";
 
 export const ledgerRepository = {
   /**
-   * Resolves whether a Ledger is the paired half of a Bank Account or a
-   * Customer (26-customer-management.md's generic-edit exclusion — a Ledger
-   * with a detail row may only be changed through its owning module's
-   * combined form, inside the paired transaction). Returns the row's
-   * companyId too so callers can apply the standard cross-company
-   * "not found" rule before acting on the link.
+   * Resolves whether a Ledger is the paired half of a Bank Account, a
+   * Customer, or a Supplier (26-customer-management.md's generic-edit
+   * exclusion, extended by 27-supplier-management.md — a Ledger with a
+   * detail row may only be changed through its owning module's combined
+   * form, inside the paired transaction). Returns the row's companyId too
+   * so callers can apply the standard cross-company "not found" rule before
+   * acting on the link.
    */
   async findDetailLink(
     id: string
@@ -94,20 +95,27 @@ export const ledgerRepository = {
         companyId: true,
         bankAccount: { select: { id: true } },
         customer: { select: { id: true } },
+        supplier: { select: { id: true } },
       },
     });
     if (!row) {
       return null;
     }
-    const link = row.bankAccount ? "bankAccount" : row.customer ? "customer" : null;
+    const link = row.bankAccount
+      ? "bankAccount"
+      : row.customer
+        ? "customer"
+        : row.supplier
+          ? "supplier"
+          : null;
     return { companyId: row.companyId, link };
   },
 
   /**
-   * Every Ledger in the company that has a detail row (BankAccount or
-   * Customer), with which module owns it — lets the generic Ledger list
-   * replace its Edit/Activate/Deactivate controls with a "managed via …"
-   * hint for rows the service would reject anyway.
+   * Every Ledger in the company that has a detail row (BankAccount,
+   * Customer, or Supplier), with which module owns it — lets the generic
+   * Ledger list replace its Edit/Activate/Deactivate controls with a
+   * "managed via …" hint for rows the service would reject anyway.
    */
   async findDetailManagedLedgers(
     companyId: string
@@ -115,11 +123,18 @@ export const ledgerRepository = {
     const rows = await prisma.ledger.findMany({
       where: {
         companyId,
-        OR: [{ bankAccount: { isNot: null } }, { customer: { isNot: null } }],
+        OR: [
+          { bankAccount: { isNot: null } },
+          { customer: { isNot: null } },
+          { supplier: { isNot: null } },
+        ],
       },
-      select: { id: true, bankAccount: { select: { id: true } } },
+      select: { id: true, bankAccount: { select: { id: true } }, customer: { select: { id: true } } },
     });
-    return rows.map((row) => ({ id: row.id, link: row.bankAccount ? "bankAccount" : "customer" }));
+    return rows.map((row) => ({
+      id: row.id,
+      link: row.bankAccount ? "bankAccount" : row.customer ? "customer" : "supplier",
+    }));
   },
 
   async findMany(companyId: string, filters: LedgerListFilters = {}): Promise<LedgerWithGroup[]> {

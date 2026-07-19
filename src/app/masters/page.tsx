@@ -9,6 +9,7 @@ import {
   Percent,
   Ruler,
   Tag,
+  Truck,
   Users,
   Warehouse,
 } from "lucide-react";
@@ -77,6 +78,12 @@ const MASTERS_MODULES = [
     icon: Users,
     title: "Customers",
     description: "Manage the permanent customer master referenced by sales documents and pricing.",
+  },
+  {
+    href: "/masters/suppliers",
+    icon: Truck,
+    title: "Suppliers",
+    description: "Manage the permanent supplier master referenced by purchase documents.",
   },
 ] as const;
 

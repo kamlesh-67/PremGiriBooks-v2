@@ -31,16 +31,18 @@ interface LedgerTableProps {
   /** Server Actions for the status toggle; default to the generic Ledger ones. */
   activateAction?: (id: string) => Promise<ActionResult<Ledger>>;
   deactivateAction?: (id: string) => Promise<ActionResult<Ledger>>;
-  /** Ledgers paired with a BankAccount/Customer detail row — their Edit and
-   * status controls are replaced with a "managed via …" hint because they
-   * change only through Bank/Customer Management's combined form
-   * (26-customer-management.md). */
-  detailManaged?: { id: string; link: "bankAccount" | "customer" }[];
+  /** Ledgers paired with a BankAccount/Customer/Supplier detail row — their
+   * Edit and status controls are replaced with a "managed via …" hint
+   * because they change only through Bank/Customer/Supplier Management's
+   * combined form (26-customer-management.md, extended by
+   * 27-supplier-management.md). */
+  detailManaged?: { id: string; link: "bankAccount" | "customer" | "supplier" }[];
 }
 
-const DETAIL_MANAGED_HINTS: Record<"bankAccount" | "customer", string> = {
+const DETAIL_MANAGED_HINTS: Record<"bankAccount" | "customer" | "supplier", string> = {
   bankAccount: "Managed via Bank Management",
   customer: "Managed via Customer Management",
+  supplier: "Managed via Supplier Management",
 };
 
 export function LedgerTable({
