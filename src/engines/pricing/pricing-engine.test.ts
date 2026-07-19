@@ -191,6 +191,81 @@ describe("pricingEngine.resolvePrice — tier defaulting end to end", () => {
   });
 });
 
+describe("pricingEngine.resolvePrice — tier-list bucket partitioning", () => {
+  it("splits a mixed findEffectiveLists result into the correct tier-matching/tier-agnostic buckets", async () => {
+    productFindByIdMock.mockResolvedValueOnce(baseProduct());
+    // findEffectiveLists' own `customerType` filter already narrows to
+    // { customerType: null } OR { customerType: tier } — this fixture still
+    // includes an unrelated-tier list to prove loadTierLists' own
+    // partitioning (not just the repository query) excludes it, rather than
+    // relying on the mock never returning something the real repository
+    // wouldn't.
+    priceListFindEffectiveListsMock.mockResolvedValueOnce([
+      {
+        id: "unrelated-tier-list",
+        customerType: "WHOLESALE",
+        items: [{ id: "item-unrelated", productId: PRODUCT_ID, sellingPrice: 1, minQuantity: 1 }],
+      },
+      {
+        id: "tier-matching-list",
+        customerType: "RETAIL",
+        items: [{ id: "item-tier", productId: PRODUCT_ID, sellingPrice: 60, minQuantity: 1 }],
+      },
+      {
+        id: "tier-agnostic-list",
+        customerType: null,
+        items: [{ id: "item-agnostic", productId: PRODUCT_ID, sellingPrice: 10, minQuantity: 1 }],
+      },
+    ]);
+
+    const result = await pricingEngine.resolvePrice({
+      companyId: COMPANY_ID,
+      productId: PRODUCT_ID,
+      quantity: 1,
+      customerType: "RETAIL",
+    });
+
+    // The tier-matching bucket wins over the (cheaper) tier-agnostic bucket,
+    // and the unrelated WHOLESALE list (cheapest of all) never enters either
+    // bucket — confirms loadTierLists partitions by `list.customerType`
+    // rather than merely trusting the repository's own filter.
+    expect(result).toMatchObject({
+      price: 60,
+      source: "PRICE_LIST",
+      priceListId: "tier-matching-list",
+    });
+  });
+
+  it("falls back to the tier-agnostic bucket when no list matches the tier", async () => {
+    productFindByIdMock.mockResolvedValueOnce(baseProduct());
+    priceListFindEffectiveListsMock.mockResolvedValueOnce([
+      {
+        id: "unrelated-tier-list",
+        customerType: "DEALER",
+        items: [{ id: "item-unrelated", productId: PRODUCT_ID, sellingPrice: 1, minQuantity: 1 }],
+      },
+      {
+        id: "tier-agnostic-list",
+        customerType: null,
+        items: [{ id: "item-agnostic", productId: PRODUCT_ID, sellingPrice: 45, minQuantity: 1 }],
+      },
+    ]);
+
+    const result = await pricingEngine.resolvePrice({
+      companyId: COMPANY_ID,
+      productId: PRODUCT_ID,
+      quantity: 1,
+      customerType: "RETAIL",
+    });
+
+    expect(result).toMatchObject({
+      price: 45,
+      source: "PRICE_LIST",
+      priceListId: "tier-agnostic-list",
+    });
+  });
+});
+
 describe("pricingEngine.resolvePrice — customer-assigned list loading", () => {
   it("resolves through the customer's assigned list when active and effective", async () => {
     productFindByIdMock.mockResolvedValueOnce(baseProduct());
