@@ -285,8 +285,9 @@ Mirrors `38-sales-invoice.md`'s orchestration exactly, direction adjusted:
    payment rows, the same "no independently-editable derived field" posture as every
    other computed total in this project); the supplier's remainder,
    `grandTotal − amountPaid`, is guaranteed non-negative by this check.
-4. Generate `invoiceNumber` (`ensureSequence`/`generateNumber`, spec 34's contract) — the
-   first time this row receives a real number (see Decisions).
+4. Generate `invoiceNumber` (`ensureSequence` before the transaction, `generateNumber`
+   inside it — spec 34's contract, the same split `38-sales-invoice.md`'s step 5 uses)
+   — the first time this row receives a real number (see Decisions).
 5. `inventoryEngine.recordMovements(companyId, lines, tx)` —
    `StockTransactionType.PURCHASE`/`IN`, `referenceType = "PURCHASE_INVOICE"`.
 6. Build the balanced voucher (see Ledger Posting) and call `voucherEngine.postVoucher`
@@ -315,24 +316,49 @@ Mirrors `38-sales-invoice.md`'s orchestration exactly, direction adjusted:
 - **Balance holds by construction**, identical reasoning to Sales Invoice.
 - **No "walk-in must pay in full" equivalent** — every Purchase Invoice has a real
   Supplier Ledger to carry a remainder, unlike Sales Invoice's `WALK_IN` edge case.
-- **Ledger Mapping Validation** (all six ledgers — the five new fields plus the shared
-  `roundOffLedgerId`): posting checks each configured ledger id is not merely non-null but
-  currently **active**, **owned by the current company**, and assigned to the **expected
-  ledger group** for its role — `purchaseLedgerId` under "Purchase Accounts" (or a
-  descendant), `inputCgstLedgerId`/`inputSgstLedgerId`/`inputIgstLedgerId`/
-  `inputCessLedgerId` under "Duties & Taxes" (or a descendant), `roundOffLedgerId` any
-  active company ledger (no fixed group, per spec 38's original decision, reused here).
-  A mapping pointing at an inactive, cross-company, or wrong-group ledger is treated
-  identically to a missing one — rejected with the same friendly, mapping-specific error
-  naming which of the six failed — never silently posted against the wrong account.
+- **Ledger Mapping Validation** — **all six mappings are checked unconditionally, on
+  every posting, regardless of this specific invoice's own supply type, cess, or
+  round-off amount** (Option B, not a conditional subset): this is the same "explicit,
+  not clever" decision `38-sales-invoice.md`'s Decisions section states verbatim for its
+  own six-field mapping ("`outputIgstLedgerId`/`outputCessLedgerId` are still required
+  even for a company that only ever trades intra-state... an unused mapping simply never
+  gets an entry"), carried over here rather than re-derived. Concretely: even an
+  intra-state-only invoice with zero cess and an exact-rupee total (no round-off) still
+  requires `inputIgstLedgerId`, `inputCessLedgerId`, and `roundOffLedgerId` to be
+  configured and valid — those three simply never receive a posted entry for *this*
+  invoice (Ledger Posting's own conditional "when non-zero"/"intra-state or inter-state"
+  rules govern which mappings actually get an entry; this rule governs which mappings
+  must exist at all). The alternative of validating only the subset a given invoice would
+  actually use was considered and rejected — it would mean the same Company Settings page
+  passes validation differently depending on transaction content, which the settings
+  screen has no way to preview. For each of the six, posting checks the configured ledger
+  id is not merely non-null but currently **active**, **owned by the current company**,
+  and assigned to the **expected ledger group** for its role — `purchaseLedgerId` under
+  "Purchase Accounts" (or a descendant), `inputCgstLedgerId`/`inputSgstLedgerId`/
+  `inputIgstLedgerId`/`inputCessLedgerId` under "Duties & Taxes" (or a descendant),
+  `roundOffLedgerId` any active company ledger (no fixed group, per spec 38's original
+  decision, reused here). A mapping pointing at an inactive, cross-company, or
+  wrong-group ledger is treated identically to a missing one — rejected with the same
+  friendly, mapping-specific error naming which of the six failed — never silently
+  posted against the wrong account.
 
 ## Cancellation
 
 - `cancelPurchaseInvoice(id)`: only a `POSTED`, not-yet-referenced-by-a-Purchase-Return
-  invoice. Calls `voucherEngine.cancelVoucher` and reverses the stock movement (`OUT`,
-  undoing the earlier `IN`) atomically — mirrors Sales Invoice's cancellation exactly.
-  A linked GRN's `INVOICED` status is **not** auto-reverted (same documented gap as
-  spec 38's identical decision).
+  invoice. Runs inside **one Serializable transaction with the same bounded-retry
+  contract as posting** (spec 32's `SERIALIZABLE_RETRY` convention) that owns both the
+  voucher reversal and the stock reversal — **`voucherEngine.cancelVoucher` gains an
+  optional `tx?` parameter for this one caller** (spec 31 currently documents
+  `cancelVoucher(companyId, id)` with no transaction parameter, unlike `postVoucher`'s
+  own `tx?`; this is a documented amendment to that contract, the same kind of one-caller
+  extension already made to `customerService.createCustomer` in `38-sales-invoice.md`'s
+  Quick Customer conversion), so `cancelPurchaseInvoice` calls
+  `voucherEngine.cancelVoucher(companyId, id, tx)` and
+  `inventoryEngine.recordMovements(companyId, lines, tx)` (`OUT`, undoing the earlier
+  `IN`) **on that same transaction client**, not two separately-committed calls each
+  owning its own transaction — if either half fails, both roll back together. Sets
+  `status = CANCELLED`. A linked GRN's `INVOICED` status is **not** auto-reverted (same
+  documented gap as spec 38's identical decision).
 
 ---
 
@@ -438,9 +464,11 @@ New enum `PurchaseInvoiceStatus`; new models `PurchaseInvoice`, `PurchaseInvoice
 # Code Standards
 
 Same as spec 38: strict TypeScript, no `any`, no arithmetic outside its owning engine,
-Serializable transaction for posting, vitest coverage for: the full posting
-orchestration (entry balancing across payment-split combinations, both round-off
-directions), tax-override audit trail, HSN hard-block, cancellation's mirrored reversal,
+Serializable transaction for posting and for cancellation (both sharing the bounded-retry
+convention), vitest coverage for: the full posting orchestration (entry balancing across
+payment-split combinations, both round-off directions), tax-override audit trail, HSN
+hard-block, cancellation's mirrored reversal and its single-transaction atomicity
+(injected mid-cancellation failure rolls back both the voucher and stock reversal),
 ledger-mapping rejection matrix — missing, inactive, cross-company, and wrong-group,
 one case per each of the five new fields plus the shared round-off field —
 `supplierInvoiceNumber` per-supplier uniqueness rejection, the GRN line-matching
@@ -491,7 +519,9 @@ Verify
   invoices coexist without a unique-constraint conflict; posting assigns the first real
   `invoiceNumber`.
 - Cancelling a posted invoice produces a correct mirrored voucher reversal and matching
-  reversed stock transaction.
+  reversed stock transaction, both committed on the same transaction client — an
+  injected failure in the stock reversal rolls back the voucher reversal too, and vice
+  versa (no partial cancellation is ever observable).
 - Missing, inactive, cross-company, or wrong-group any of the five new Company Settings
   ledger mappings (or the shared Round Off mapping) blocks posting with a specific,
   friendly error naming which mapping failed and why.
