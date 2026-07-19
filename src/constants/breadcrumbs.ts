@@ -23,6 +23,7 @@ export const BREADCRUMB_LABELS: Record<string, string> = {
   warehouses: "Warehouses",
   products: "Products",
   "margin-profiles": "Margin Profiles",
+  "price-lists": "Price Lists",
   customers: "Customers",
   suppliers: "Suppliers",
   settings: "Settings",
