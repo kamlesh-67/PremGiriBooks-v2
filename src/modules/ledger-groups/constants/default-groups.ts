@@ -16,6 +16,7 @@ export interface DefaultLedgerGroupSeed {
 // lookups loudly rather than silently.
 export const CASH_IN_HAND_GROUP_NAME = "Cash-in-Hand";
 export const BANK_ACCOUNTS_GROUP_NAME = "Bank Accounts";
+export const SUNDRY_DEBTORS_GROUP_NAME = "Sundry Debtors";
 export const DIRECT_EXPENSES_GROUP_NAME = "Direct Expenses";
 export const INDIRECT_EXPENSES_GROUP_NAME = "Indirect Expenses";
 export const DIRECT_INCOMES_GROUP_NAME = "Direct Incomes";
@@ -41,7 +42,7 @@ export const DEFAULT_LEDGER_GROUPS: readonly DefaultLedgerGroupSeed[] = [
   { name: "Current Assets", parent: null, nature: "ASSET", affectsGrossProfit: false },
   { name: BANK_ACCOUNTS_GROUP_NAME, parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
   { name: CASH_IN_HAND_GROUP_NAME, parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
-  { name: "Sundry Debtors", parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
+  { name: SUNDRY_DEBTORS_GROUP_NAME, parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
   { name: "Loans & Advances (Asset)", parent: "Current Assets", nature: "ASSET", affectsGrossProfit: false },
   { name: "Misc. Expenses (Asset)", parent: null, nature: "ASSET", affectsGrossProfit: false },
   { name: "Sales Accounts", parent: null, nature: "INCOME", affectsGrossProfit: true },

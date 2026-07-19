@@ -29,6 +29,11 @@ export interface LedgerUpdateData {
   openingBalance: number;
   openingBalanceType: PrismaLedger["openingBalanceType"];
   description: string | null;
+  // Only supplied by 26-customer-management.md's combined edit (re-parenting
+  // within the "Sundry Debtors" subtree, re-validated by customer-service.ts
+  // before the write). The generic Ledger edit never sets it — a plain
+  // Ledger's group stays immutable per 14-ledger-master.md.
+  ledgerGroupId?: string;
 }
 
 // `openingBalance` is a Prisma `Decimal` (decimal.js) instance at the
@@ -68,7 +73,55 @@ function buildWhere(companyId: string, filters: LedgerListFilters): Prisma.Ledge
   return where;
 }
 
+/** Which detail-row module owns a Ledger, if any — see findDetailLink. */
+export type LedgerDetailLink = "bankAccount" | "customer";
+
 export const ledgerRepository = {
+  /**
+   * Resolves whether a Ledger is the paired half of a Bank Account or a
+   * Customer (26-customer-management.md's generic-edit exclusion — a Ledger
+   * with a detail row may only be changed through its owning module's
+   * combined form, inside the paired transaction). Returns the row's
+   * companyId too so callers can apply the standard cross-company
+   * "not found" rule before acting on the link.
+   */
+  async findDetailLink(
+    id: string
+  ): Promise<{ companyId: string; link: LedgerDetailLink | null } | null> {
+    const row = await prisma.ledger.findUnique({
+      where: { id },
+      select: {
+        companyId: true,
+        bankAccount: { select: { id: true } },
+        customer: { select: { id: true } },
+      },
+    });
+    if (!row) {
+      return null;
+    }
+    const link = row.bankAccount ? "bankAccount" : row.customer ? "customer" : null;
+    return { companyId: row.companyId, link };
+  },
+
+  /**
+   * Every Ledger in the company that has a detail row (BankAccount or
+   * Customer), with which module owns it — lets the generic Ledger list
+   * replace its Edit/Activate/Deactivate controls with a "managed via …"
+   * hint for rows the service would reject anyway.
+   */
+  async findDetailManagedLedgers(
+    companyId: string
+  ): Promise<{ id: string; link: LedgerDetailLink }[]> {
+    const rows = await prisma.ledger.findMany({
+      where: {
+        companyId,
+        OR: [{ bankAccount: { isNot: null } }, { customer: { isNot: null } }],
+      },
+      select: { id: true, bankAccount: { select: { id: true } } },
+    });
+    return rows.map((row) => ({ id: row.id, link: row.bankAccount ? "bankAccount" : "customer" }));
+  },
+
   async findMany(companyId: string, filters: LedgerListFilters = {}): Promise<LedgerWithGroup[]> {
     const rows = await prisma.ledger.findMany({
       where: buildWhere(companyId, filters),

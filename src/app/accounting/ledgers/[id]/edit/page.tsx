@@ -19,7 +19,10 @@ export default async function EditLedgerPage({ params }: EditLedgerPageProps) {
     redirect("/accounting/ledgers");
   }
 
-  const ledger = await ledgerService.getLedger(id);
+  // getEditableLedger (not getLedger) — a detail-managed ledger (paired with
+  // a BankAccount or Customer row) is not editable here; its fields change
+  // only through Bank/Customer Management's combined form.
+  const ledger = await ledgerService.getEditableLedger(id);
   if (!ledger) {
     notFound();
   }

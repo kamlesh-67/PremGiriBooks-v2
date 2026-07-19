@@ -31,7 +31,17 @@ interface LedgerTableProps {
   /** Server Actions for the status toggle; default to the generic Ledger ones. */
   activateAction?: (id: string) => Promise<ActionResult<Ledger>>;
   deactivateAction?: (id: string) => Promise<ActionResult<Ledger>>;
+  /** Ledgers paired with a BankAccount/Customer detail row — their Edit and
+   * status controls are replaced with a "managed via …" hint because they
+   * change only through Bank/Customer Management's combined form
+   * (26-customer-management.md). */
+  detailManaged?: { id: string; link: "bankAccount" | "customer" }[];
 }
+
+const DETAIL_MANAGED_HINTS: Record<"bankAccount" | "customer", string> = {
+  bankAccount: "Managed via Bank Management",
+  customer: "Managed via Customer Management",
+};
 
 export function LedgerTable({
   ledgers,
@@ -41,9 +51,14 @@ export function LedgerTable({
   entityLabel = "Ledger",
   activateAction = activateLedgerAction,
   deactivateAction = deactivateLedgerAction,
+  detailManaged,
 }: LedgerTableProps) {
   const [pendingId, setPendingId] = React.useState<string | null>(null);
   const entityLower = entityLabel.toLowerCase();
+  const managedLinks = React.useMemo(
+    () => new Map((detailManaged ?? []).map((entry) => [entry.id, entry.link])),
+    [detailManaged]
+  );
 
   async function handleToggleActive(ledger: LedgerWithGroup) {
     setPendingId(ledger.id);
@@ -99,28 +114,39 @@ export function LedgerTable({
               <LedgerStatusBadge isActive={ledger.isActive} />
             </TableCell>
             <TableCell className="text-right">
-              <div className="flex justify-end gap-2">
-                {canEdit ? (
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    nativeButton={false}
-                    render={
-                      <Link href={`${editBasePath}/${ledger.id}/edit`} aria-label={`Edit ${entityLower}`}>
-                        <Pencil size={16} />
-                      </Link>
-                    }
-                  />
-                ) : null}
-                {ledger.isSystemDefined || !canManage ? null : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pendingId === ledger.id}
-                    onClick={() => handleToggleActive(ledger)}
-                  >
-                    {ledger.isActive ? "Deactivate" : "Activate"}
-                  </Button>
+              <div className="flex items-center justify-end gap-2">
+                {managedLinks.has(ledger.id) ? (
+                  <span className="text-xs text-muted-foreground">
+                    {DETAIL_MANAGED_HINTS[managedLinks.get(ledger.id) ?? "customer"]}
+                  </span>
+                ) : (
+                  <>
+                    {canEdit ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        nativeButton={false}
+                        render={
+                          <Link
+                            href={`${editBasePath}/${ledger.id}/edit`}
+                            aria-label={`Edit ${entityLower}`}
+                          >
+                            <Pencil size={16} />
+                          </Link>
+                        }
+                      />
+                    ) : null}
+                    {ledger.isSystemDefined || !canManage ? null : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pendingId === ledger.id}
+                        onClick={() => handleToggleActive(ledger)}
+                      >
+                        {ledger.isActive ? "Deactivate" : "Activate"}
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             </TableCell>

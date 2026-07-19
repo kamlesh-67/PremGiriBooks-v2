@@ -65,7 +65,7 @@ Implement all master data and shared business engines required by transactional 
 
 Phase Status
 
-🟨 In Progress — Accounting Foundation group complete (all 5 implemented as of 2026-07-14). Inventory Masters group complete (all 7 implemented as of 2026-07-18): Unit Management (#17, `context/feature-specs/19-unit-management.md`) implemented 2026-07-14; Category Management (#18, `context/feature-specs/20-category-management.md`) implemented 2026-07-15; Brand Management (#19, `context/feature-specs/21-brand-management.md`) implemented 2026-07-15; HSN Management (#20, `context/feature-specs/22-hsn-management.md`) implemented 2026-07-15; GST Rate Management (#21, `context/feature-specs/23-gst-rate-management.md`) implemented 2026-07-15; Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) implemented 2026-07-18; Product Management (#23, `context/feature-specs/25-product-management.md`) implemented 2026-07-18. Business Parties, Pricing, and Shared ERP Engines groups below are not started.
+🟨 In Progress — Accounting Foundation group complete (all 5 implemented as of 2026-07-14). Inventory Masters group complete (all 7 implemented as of 2026-07-18): Unit Management (#17, `context/feature-specs/19-unit-management.md`) implemented 2026-07-14; Category Management (#18, `context/feature-specs/20-category-management.md`) implemented 2026-07-15; Brand Management (#19, `context/feature-specs/21-brand-management.md`) implemented 2026-07-15; HSN Management (#20, `context/feature-specs/22-hsn-management.md`) implemented 2026-07-15; GST Rate Management (#21, `context/feature-specs/23-gst-rate-management.md`) implemented 2026-07-15; Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) implemented 2026-07-18; Product Management (#23, `context/feature-specs/25-product-management.md`) implemented 2026-07-18. Business Parties group started 2026-07-19: Customer Management (#24, `context/feature-specs/26-customer-management.md`) implemented 2026-07-19; Supplier Management (#25) remains drafted-only. Pricing and Shared ERP Engines groups below are not started.
 
 ---
 
@@ -112,8 +112,10 @@ Feature-specs for the remaining six items were all drafted 2026-07-14 (spec-file
 
 ## Business Parties
 
-Feature-specs for both items were drafted 2026-07-18 (not yet implemented). Spec-file
-numbers are sequential and never reused, so they diverge from tracker numbers:
+Feature-specs for both items were drafted 2026-07-18. Customer Management (#24) was
+implemented 2026-07-19 (git branch `new-features`); Supplier Management (#25) remains
+drafted-only. Spec-file numbers are sequential and never reused, so they diverge from
+tracker numbers:
 
 | Tracker # | Feature             | Spec file                                          |
 | --------- | ------------------- | -------------------------------------------------- |
@@ -122,7 +124,7 @@ numbers are sequential and never reused, so they diverge from tracker numbers:
 
 | #   | Feature             | Depends On    | Status |
 | --- | ------------------- | ------------- | ------ |
-| 24  | Customer Management | Ledger Master | ⬜     |
+| 24  | Customer Management | Ledger Master | ✅     |
 | 25  | Supplier Management | Ledger Master | ⬜     |
 
 ---
@@ -310,7 +312,7 @@ These are intentionally outside the first production release.
 
 **Next Feature to Implement**
 
-➡ **24 - Customer Management** (Business Parties group) — spec drafted 2026-07-18 as `context/feature-specs/26-customer-management.md`. **Every remaining Phase 2 item now has a drafted spec (2026-07-18)**: Business Parties #24–#25 (specs 26–27), Pricing #26–#28 (specs 28–30), Shared ERP Engines #29–#32 (specs 31–34) — see each group's spec-file table above, including the recommended implementation order (26 → 27; 28 → 29 → 30; engines: 34 → 31, with 32/33 independent). All of #24's dependencies are ✅, so it is unblocked — but the specific next feature still awaits explicit user direction, since feature-spec 12 (Branch Management) remains drafted-but-unimplemented from a prior session (see the Phase 1 status-discrepancy note above) and per `ai-workflow-rules.md` only one feature is worked at a time.
+➡ **25 - Supplier Management** (Business Parties group) — spec drafted 2026-07-18 as `context/feature-specs/27-supplier-management.md`, written as a mirror of spec 26. **#24 Customer Management was implemented 2026-07-19** (git branch `new-features`; see `context/progress-tracker.md`'s Completed entry), so #25 is the recommended next item per the recorded order (26 → 27; Pricing 28 → 29 → 30; engines: 34 → 31, with 32/33 independent). All remaining Phase 2 items have drafted specs (2026-07-18). Feature-spec 12 (Branch Management) remains drafted-but-unimplemented from a prior session (see the Phase 1 status-discrepancy note above); per `ai-workflow-rules.md` only one feature is worked at a time and the next feature awaits explicit user direction.
 
 ---
 
