@@ -87,6 +87,7 @@ model Company {
   suppliers         Supplier[]
   auditLogs         AuditLog[]
   documentSequences DocumentSequence[]
+  vouchers          Voucher[]
 
   @@index([companyName])
 }
@@ -119,6 +120,7 @@ model FinancialYear {
   company Company @relation(fields: [companyId], references: [id])
 
   documentSequences DocumentSequence[]
+  vouchers          Voucher[]
 
   @@unique([companyId, name])
   @@index([companyId, isCurrent])
@@ -176,6 +178,7 @@ model User {
   company  Company?  @relation(fields: [companyId], references: [id])
   role     Role?     @relation(fields: [roleId], references: [id])
   sessions Session[]
+  vouchers Voucher[]
 
   @@index([companyId])
   @@index([roleId])
@@ -290,9 +293,10 @@ model Ledger {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
-  bankAccount BankAccount?
-  customer    Customer?
-  supplier    Supplier?
+  bankAccount    BankAccount?
+  customer       Customer?
+  supplier       Supplier?
+  voucherEntries VoucherEntry[]
 
   @@unique([companyId, name])
   @@index([companyId])
@@ -915,4 +919,83 @@ model DocumentSequence {
 
   @@unique([companyId, financialYearId, documentType])
   @@index([companyId])
+}
+
+enum VoucherType {
+  PAYMENT
+  RECEIPT
+  CONTRA
+  JOURNAL
+  SALES
+  PURCHASE
+  CREDIT_NOTE
+  DEBIT_NOTE
+  SALES_RETURN
+  PURCHASE_RETURN
+}
+
+enum VoucherStatus {
+  POSTED
+  CANCELLED
+}
+
+// The double-entry accounting core (31-voucher-engine.md) — the single place
+// ledger postings exist. Born POSTED (no draft status: the Document-Driven
+// Draft->...->Posted lifecycle belongs to business documents, not vouchers)
+// and immutable thereafter; cancellation creates a mirrored reversal instead
+// of ever mutating a posted row. No `branchId` — Branch Management (spec 12)
+// is unimplemented (same reasoning as DocumentSequence above).
+model Voucher {
+  id              String        @id @default(uuid())
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id])
+  financialYearId String
+  financialYear   FinancialYear @relation(fields: [financialYearId], references: [id])
+  voucherType     VoucherType
+  voucherNumber   String
+  voucherDate     DateTime      @db.Date
+  status          VoucherStatus @default(POSTED)
+  narration       String?
+  // Polymorphic link to the source document ("SALES_INVOICE", its id) — no FK
+  // by design: voucher rows must outlive any referencing table's shape, and
+  // the source-document tables don't exist yet. Manual vouchers (#50-#53)
+  // leave both null.
+  referenceType   String?
+  referenceId     String?
+  // Sum of debit entries (== credit sum) — denormalized for list rendering
+  // only, never used in balance computation (entries are the truth).
+  totalAmount     Decimal       @db.Decimal(14, 2)
+  // Self-relation, @unique: a voucher is reversed at most once. The reversal
+  // voucher's entries mirror the original with DEBIT<->CREDIT swapped.
+  reversalOfId    String?       @unique
+  reversalOf      Voucher?      @relation("VoucherReversal", fields: [reversalOfId], references: [id])
+  reversedBy      Voucher?      @relation("VoucherReversal")
+  createdByUserId String?
+  createdBy       User?         @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  entries VoucherEntry[]
+
+  @@unique([companyId, financialYearId, voucherType, voucherNumber])
+  @@index([companyId, voucherDate])
+  @@index([companyId, voucherType])
+  @@index([referenceType, referenceId])
+}
+
+// No companyId here — reachable only through its Voucher; every query joins
+// through Voucher (the spec-29 PriceListItem reasoning).
+model VoucherEntry {
+  id         String      @id @default(uuid())
+  voucherId  String
+  voucher    Voucher     @relation(fields: [voucherId], references: [id])
+  ledgerId   String
+  ledger     Ledger      @relation(fields: [ledgerId], references: [id])
+  entryType  BalanceType
+  amount     Decimal     @db.Decimal(14, 2)
+  lineNumber Int
+
+  @@unique([voucherId, lineNumber])
+  @@index([ledgerId])
+  @@index([voucherId])
 }
