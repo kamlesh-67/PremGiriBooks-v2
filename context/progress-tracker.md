@@ -49,11 +49,42 @@ Mapping so far:
 | 32           | Inventory Engine (`32-inventory-engine.md`)                                     | `context/Phases/phase-tracker.md` Phase 2 — Core Business Foundation → Shared ERP Engines (#30) — **implemented 2026-07-19** (git branch `32-inventory`); independent of the other engines |
 | 33           | GST Engine (`33-gst-engine.md`)                                                 | `context/Phases/phase-tracker.md` Phase 2 — Core Business Foundation → Shared ERP Engines (#31) — **implemented 2026-07-19** (git branch `32-inventory`); last of the four Shared ERP Engines specs, closing Phase 2 entirely |
 | 34           | Document Number Engine (`34-document-number-engine.md`)                         | `context/Phases/phase-tracker.md` Phase 2 — Core Business Foundation → Shared ERP Engines (#32) — **implemented 2026-07-19** (git branch `34-document-number-engine`), first among the engines per the recorded order (spec 31/Voucher Engine depends on it) |
+| 35           | Quotations (`35-quotations.md`)                                                  | `context/Phases/phase-tracker.md` Phase 3 — Sales Management (#33) — **spec drafted 2026-07-19, not implemented** |
+| 36           | Sales Orders (`36-sales-orders.md`)                                              | `context/Phases/phase-tracker.md` Phase 3 — Sales Management (#34) — **spec drafted 2026-07-19, not implemented** |
+| 37           | Delivery Challans (`37-delivery-challans.md`)                                    | `context/Phases/phase-tracker.md` Phase 3 — Sales Management (#35) — **spec drafted 2026-07-19, not implemented**; deliberately excludes any Inventory Engine call, per the tracker's own `Depends On` column (see the spec's Goal note) |
+| 38           | Sales Invoice (`38-sales-invoice.md`)                                            | `context/Phases/phase-tracker.md` Phase 3 — Sales Management (#36) — **spec drafted 2026-07-19, not implemented**; the pivotal Phase 3 spec — first consumer of Voucher + Inventory + GST Engines together, and adds a new Company Settings Sales/GST ledger mapping (`salesLedgerId`/`outputCgstLedgerId`/`outputSgstLedgerId`/`outputIgstLedgerId`/`outputCessLedgerId`/`roundOffLedgerId`) that specs 39–41 reuse |
+| 39           | Sales Return (`39-sales-return.md`)                                              | `context/Phases/phase-tracker.md` Phase 3 — Sales Management (#37) — **spec drafted 2026-07-19, not implemented** |
+| 40           | Credit Note (`40-credit-note.md`)                                                | `context/Phases/phase-tracker.md` Phase 3 — Sales Management (#38) — **spec drafted 2026-07-19, not implemented** |
+| 41           | Debit Note (`41-debit-note.md`)                                                  | `context/Phases/phase-tracker.md` Phase 3 — Sales Management (#39) — **spec drafted 2026-07-19, not implemented**; last item in Phase 3 |
 
 **A third numbering scheme now exists alongside the two above, introduced 2026-07-13**: `context/Phases/phase-tracker.md`, a more granular live tracker (added 2026-07-13) that groups Phase 2 into named sub-groups (Accounting Foundation, Inventory Masters, Business Parties, Pricing, Shared ERP Engines) with its own `#` column (00–78) that does **not** match either `phases.md`'s business-domain Phase numbers or this file's own sequential feature-spec numbers. Feature-specs 13–17 (this table) correspond to `phase-tracker.md`'s items #12–#16 ("Accounting Foundation" group) — a coincidental near-alignment for this one group only (off by exactly one, the same off-by-one every earlier spec file number carries versus its 0-indexed tracker slot); do not assume this alignment holds for later groups. Going forward, `context/Phases/phase-tracker.md` is the authoritative day-to-day status board (its own Progress Legend/status column), `phases.md` remains the static business-domain roadmap reference, and this file's mapping table remains the sequential-implementation-order index — three different axes, not three competing sources of truth.
 
 ## Current Phase
 
+- **Feature-specs 35–41 (all seven Phase 3 — Sales Management documents) drafted
+  2026-07-19 on explicit user request** ("create `context/feature-specs/` for Phase 3 —
+  Sales Management"), covering `phase-tracker.md`'s Phase 3 items #33–#39 in full:
+  Quotations (35), Sales Orders (36), Delivery Challans (37), Sales Invoice (38), Sales
+  Return (39), Credit Note (40), Debit Note (41) — none implemented yet. Designed as one
+  coherent, cross-referencing set rather than independently: a linear conversion chain
+  (Quotation → Sales Order → Delivery Challan → Sales Invoice), with only Sales Invoice/
+  Sales Return/Credit Note/Debit Note touching the Voucher/Inventory/GST Engines (per the
+  tracker's own `Depends On` column — Quotation/Sales Order/Delivery Challan use the GST
+  and Pricing Engines for **display-only** math, never posting). Key cross-cutting
+  decisions recorded across the set: Delivery Challan deliberately does not call the
+  Inventory Engine (stock only moves at Sales Invoice time — a documented scope
+  simplification, not an oversight); Sales Invoice adds six new nullable Company Settings
+  ledger-mapping fields (Sales Account, Output CGST/SGST/IGST/Cess, Round Off) that specs
+  39–41 all reuse rather than re-deriving; Sales Invoice implements the tax-override-with-
+  audit-trail forward-note from `33-gst-engine.md`; Sales Return/Credit Note/Debit Note
+  are scoped as three non-overlapping documents (physical quantity-based return with
+  stock movement; pure financial decrease with no stock movement; pure financial increase
+  with no stock movement) rather than three redundant ways to do the same thing. Printing/
+  PDF/WhatsApp sharing (listed as Sales Management features in project-overview.md) are
+  deferred across all seven specs to a future dedicated feature-spec, except a bare
+  browser-print view on Sales Invoice itself (the one document that must legally leave the
+  business). Per `ai-workflow-rules.md`'s one-feature-at-a-time rule, none of these seven
+  should be implemented without explicit per-spec instruction.
 - **Feature-spec 33 — GST Engine (tracker item #31) — implemented 2026-07-19** on branch `32-inventory`. Last of the four Shared ERP Engines group specs to land (after Document Number Engine #32/tracker, Voucher Engine #29/tracker, and Inventory Engine #30/tracker) — **this closes the Shared ERP Engines group and Phase 2 (Core Business Foundation) in full.** Purest engine of the four: no schema, no repository, no I/O at all — `src/engines/gst/` (`gst-engine.ts`, `gst-calculation.ts`, `state-codes.ts`, `types.ts`) is pure synchronous calculation, unit-tested directly (56 new vitest cases: `gst-calculation.test.ts`, `state-codes.test.ts`, `gst-engine.test.ts`). Phase 3 (Sales Management) is next per `phase-tracker.md`.
 - **Feature-spec 32 — Inventory Engine (tracker item #30) — implemented 2026-07-19** on branch `32-inventory`. Third of the four Shared ERP Engines group specs to land (after Document Number Engine #32/tracker and Voucher Engine #29/tracker). GST Engine (spec 33) has since also been implemented (see the entry above), closing the group.
 - **Feature-spec 31 — Voucher Engine (tracker item #29) — implemented 2026-07-19** on branch `34-document-number-engine`, immediately after Feature-spec 34 on the same branch (the originally-requested task, paused to build spec 34 first — see the entry below and the prior Current Goal note). Second of the four Shared ERP Engines group specs to land. Spec 32 (Inventory Engine) and spec 33 (GST Engine) have since also been implemented (see the entries above), closing the group and Phase 2 in full.
