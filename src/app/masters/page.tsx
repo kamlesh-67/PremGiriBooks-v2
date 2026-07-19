@@ -5,6 +5,7 @@ import {
   CalendarRange,
   FolderTree,
   Hash,
+  ListOrdered,
   Package,
   Percent,
   Ruler,
@@ -79,6 +80,12 @@ const MASTERS_MODULES = [
     icon: TrendingUp,
     title: "Margin Profiles",
     description: "Manage the named margin/markup pricing rules the Pricing Engine will apply.",
+  },
+  {
+    href: "/masters/price-lists",
+    icon: ListOrdered,
+    title: "Price Lists",
+    description: "Manage named collections of fixed selling prices the Pricing Engine will consult.",
   },
   {
     href: "/masters/customers",

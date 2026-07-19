@@ -82,6 +82,7 @@ model Company {
   warehouses     Warehouse[]
   products       Product[]
   marginProfiles MarginProfile[]
+  priceLists     PriceList[]
   customers      Customer[]
   suppliers      Supplier[]
   auditLogs      AuditLog[]
@@ -587,6 +588,8 @@ model Product {
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
 
+  priceListItems PriceListItem[]
+
   @@unique([companyId, name])
   @@unique([companyId, productCode])
   @@unique([companyId, barcode])
@@ -631,6 +634,64 @@ model MarginProfile {
 
   @@unique([companyId, name])
   @@index([companyId])
+}
+
+// Named collection of fixed selling prices (29-price-lists.md, PRD.md §587)
+// the Pricing Engine (#28) will consult BEFORE falling back to margin
+// calculation. Pure master data — no price resolution (which list wins,
+// quantity-break selection, date-window selection) lives here or anywhere in
+// this module (architecture-context.md Invariant 6, Engine Driven).
+// customerType null = tier-agnostic, applies to any customer the Pricing
+// Engine routes to it. effectiveFrom/effectiveTo (both optional, inclusive
+// calendar days) are the promotional-pricing primitive — a Diwali list is
+// just a list with a window; overlapping windows across lists are legal by
+// design, the Pricing Engine's resolution order decides among
+// simultaneously-effective lists. No isSystemDefined and no seeding. No
+// delete — Activate/Deactivate only, same as every master since Units.
+model PriceList {
+  id            String        @id @default(uuid())
+  companyId     String
+  company       Company       @relation(fields: [companyId], references: [id])
+  name          String
+  customerType  CustomerType?
+  effectiveFrom DateTime?     @db.Date
+  effectiveTo   DateTime?     @db.Date
+  description   String?
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  items PriceListItem[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+}
+
+// A price row within a PriceList — the quantity-pricing primitive:
+// (priceListId, productId, minQuantity) unique means one product may carry
+// several rows ("1+ -> price A, 10+ -> price B"); the Pricing Engine picks
+// the highest break <= ordered quantity (not implemented here). Deliberately
+// carries NO companyId — an item is reachable only through its parent list,
+// every repository query joins through priceListId, and the parent's
+// companyId is the single tenant anchor. Item rows ARE hard-deletable
+// (unlike every other master's child data) — a detail line of an editable
+// master, not a business record with history; nothing references a row, and
+// Sales documents will snapshot the resolved price at posting time rather
+// than referencing it (the HSN snapshot-at-posting precedent).
+model PriceListItem {
+  id           String    @id @default(uuid())
+  priceListId  String
+  priceList    PriceList @relation(fields: [priceListId], references: [id])
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id])
+  sellingPrice Decimal   @db.Decimal(14, 2)
+  minQuantity  Decimal   @default(1) @db.Decimal(14, 4)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([priceListId, productId, minQuantity])
+  @@index([priceListId])
+  @@index([productId])
 }
 
 // The Pricing Engine's (#28) two company-choosable ways to derive a selling
