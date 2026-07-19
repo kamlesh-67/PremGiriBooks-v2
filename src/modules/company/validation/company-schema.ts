@@ -1,10 +1,13 @@
 import { z } from "zod";
 
-const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-const MOBILE_REGEX = /^[6-9]\d{9}$/;
-const PIN_CODE_REGEX = /^[1-9][0-9]{5}$/;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import {
+  EMAIL_REGEX,
+  GSTIN_REGEX,
+  MOBILE_REGEX,
+  PAN_REGEX,
+  PIN_CODE_REGEX,
+} from "@/lib/validation-patterns";
+
 const WEBSITE_REGEX = /^https?:\/\/.+/i;
 
 function optionalText(): z.ZodOptional<z.ZodString> {

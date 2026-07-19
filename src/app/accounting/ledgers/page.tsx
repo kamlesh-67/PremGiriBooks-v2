@@ -16,8 +16,9 @@ export default async function LedgerListPage() {
     redirect("/");
   }
 
-  const [ledgers, isAdmin, canCreate, canEdit, canManage] = await Promise.all([
+  const [ledgers, detailManaged, isAdmin, canCreate, canEdit, canManage] = await Promise.all([
     ledgerService.listLedgers(),
+    ledgerService.listDetailManagedLedgers(),
     isCurrentUserCompanyAdmin(),
     hasPermission(user, "accounting", "create"),
     hasPermission(user, "accounting", "edit"),
@@ -47,7 +48,12 @@ export default async function LedgerListPage() {
           ) : null}
         </div>
 
-        <LedgerTable ledgers={ledgers} canEdit={canEdit} canManage={canManage} />
+        <LedgerTable
+          ledgers={ledgers}
+          canEdit={canEdit}
+          canManage={canManage}
+          detailManaged={detailManaged}
+        />
       </div>
     </AppShell>
   );

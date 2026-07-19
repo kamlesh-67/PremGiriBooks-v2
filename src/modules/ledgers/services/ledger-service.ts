@@ -4,8 +4,14 @@ import { AppError } from "@/lib/app-error";
 import { getCurrentCompanyUser } from "@/lib/current-user";
 import { assertPermission } from "@/lib/permissions";
 import { ledgerGroupRepository } from "@/modules/ledger-groups/repositories/ledger-group-repository";
-import { ledgerRepository } from "@/modules/ledgers/repositories/ledger-repository";
-import { getBankAccountsSubtreeIds } from "@/modules/ledgers/utils/excluded-groups";
+import {
+  ledgerRepository,
+  type LedgerDetailLink,
+} from "@/modules/ledgers/repositories/ledger-repository";
+import {
+  getBankAccountsSubtreeIds,
+  getSundryDebtorsSubtreeIds,
+} from "@/modules/ledgers/utils/excluded-groups";
 import { getExpenseHeadGroupIds } from "@/modules/ledgers/utils/expense-head-groups";
 import { getIncomeHeadGroupIds } from "@/modules/ledgers/utils/income-head-groups";
 import { isUniqueConstraintError } from "@/lib/prisma-errors";
@@ -29,6 +35,31 @@ function translatePersistError(error: unknown): never {
     throw new AppError("A ledger with this name already exists in this company.");
   }
   throw error;
+}
+
+// A Ledger with a detail row may only be changed through its owning module's
+// combined form, inside the paired transaction — a generic edit or status
+// toggle of just the Ledger half would break the change-both-together /
+// deactivate-both-together invariant (26-customer-management.md, which also
+// extended the same guard to 15-bank-management.md's Bank Account ledgers).
+const DETAIL_MANAGED_MESSAGES: Record<LedgerDetailLink, string> = {
+  bankAccount: "This ledger belongs to a bank account. Manage it through Bank Management.",
+  customer: "This ledger belongs to a customer. Manage it through Customer Management.",
+};
+
+/**
+ * Rejects the generic edit/activate/deactivate paths for a detail-managed
+ * Ledger. A cross-company id resolves identically to "not found" before the
+ * link is even considered, so this leaks nothing about other tenants.
+ */
+async function assertGenericallyEditable(id: string, companyId: string): Promise<void> {
+  const detail = await ledgerRepository.findDetailLink(id);
+  if (!detail || detail.companyId !== companyId) {
+    throw new AppError("Ledger not found.");
+  }
+  if (detail.link) {
+    throw new AppError(DETAIL_MANAGED_MESSAGES[detail.link]);
+  }
 }
 
 interface CreateUnderGroupInput {
@@ -93,14 +124,54 @@ export const ledgerService = {
     return ledgerRepository.findMany(user.companyId, { ...filters, status: "active" });
   },
 
-  /** Active, non-"Bank Accounts" groups for the generic Create Ledger screen's Group selector. */
+  /**
+   * Active groups for the generic Create Ledger screen's Group selector —
+   * excluding the "Bank Accounts" subtree (15-bank-management.md) and the
+   * "Sundry Debtors" subtree (26-customer-management.md): ledgers under
+   * those are created only through Bank/Customer Management, atomically
+   * with their detail rows.
+   */
   async listSelectableLedgerGroupsForLedger(): Promise<LedgerGroup[]> {
     const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", "view");
 
     const groups = await ledgerGroupRepository.findMany(user.companyId, { status: "active" });
-    const excludedIds = getBankAccountsSubtreeIds(groups);
-    return groups.filter((group) => !excludedIds.has(group.id));
+    const bankIds = getBankAccountsSubtreeIds(groups);
+    const debtorIds = getSundryDebtorsSubtreeIds(groups);
+    return groups.filter((group) => !bankIds.has(group.id) && !debtorIds.has(group.id));
+  },
+
+  /**
+   * Like getLedger, but resolves to null when the ledger is detail-managed
+   * (paired with a BankAccount or Customer row) — the generic Ledger edit
+   * page must not open a ledger whose fields only change through Bank/
+   * Customer Management's combined form (26-customer-management.md).
+   */
+  async getEditableLedger(id: string): Promise<LedgerWithGroup | null> {
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "accounting", "view");
+
+    const ledger = await ledgerRepository.findById(id);
+    if (!ledger || ledger.companyId !== user.companyId) {
+      return null;
+    }
+
+    const detail = await ledgerRepository.findDetailLink(id);
+    if (detail?.link) {
+      return null;
+    }
+    return ledger;
+  },
+
+  /**
+   * The company's detail-managed ledgers (id + owning module), so the
+   * generic Ledger list can replace the Edit/Activate/Deactivate controls
+   * the service rejects for those rows with a "managed via …" hint.
+   */
+  async listDetailManagedLedgers(): Promise<{ id: string; link: LedgerDetailLink }[]> {
+    const user = await getCurrentCompanyUser();
+    await assertPermission(user, "accounting", "view");
+    return ledgerRepository.findDetailManagedLedgers(user.companyId);
   },
 
   async createLedger(input: CreateLedgerInput): Promise<Ledger> {
@@ -124,6 +195,11 @@ export const ledgerService = {
         'Ledgers under "Bank Accounts" can only be created through Bank Management.'
       );
     }
+    if (getSundryDebtorsSubtreeIds(allGroups).has(group.id)) {
+      throw new AppError(
+        'Ledgers under "Sundry Debtors" can only be created through Customer Management.'
+      );
+    }
 
     try {
       return await ledgerRepository.create(user.companyId, {
@@ -144,6 +220,8 @@ export const ledgerService = {
     await assertPermission(user, "accounting", "edit");
 
     const data = updateLedgerSchema.parse(input);
+
+    await assertGenericallyEditable(id, user.companyId);
 
     try {
       const ledger = await ledgerRepository.update(id, user.companyId, {
@@ -168,6 +246,8 @@ export const ledgerService = {
     const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", LIFECYCLE_ACTION);
 
+    await assertGenericallyEditable(id, user.companyId);
+
     const result = await ledgerRepository.activate(id, user.companyId);
     switch (result.status) {
       case "not_found":
@@ -180,6 +260,8 @@ export const ledgerService = {
   async deactivateLedger(id: string): Promise<Ledger> {
     const user = await getCurrentCompanyUser();
     await assertPermission(user, "accounting", LIFECYCLE_ACTION);
+
+    await assertGenericallyEditable(id, user.companyId);
 
     const result = await ledgerRepository.deactivate(id, user.companyId);
     switch (result.status) {

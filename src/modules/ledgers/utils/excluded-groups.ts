@@ -1,4 +1,7 @@
-import { BANK_ACCOUNTS_GROUP_NAME } from "@/modules/ledger-groups/constants/default-groups";
+import {
+  BANK_ACCOUNTS_GROUP_NAME,
+  SUNDRY_DEBTORS_GROUP_NAME,
+} from "@/modules/ledger-groups/constants/default-groups";
 import { getGroupSubtreeIds } from "@/modules/ledgers/utils/group-subtree";
 import type { LedgerGroup } from "@/types/ledger-group";
 
@@ -29,4 +32,16 @@ export function getBankAccountsSubtreeIds(groups: LedgerGroup[]): Set<string> {
   // 13-ledger-groups.md's default seed data), not top-level — match by name
   // alone rather than assuming any particular position in the hierarchy.
   return getGroupSubtreeIds(groups, [BANK_ACCOUNTS_GROUP_NAME]);
+}
+
+/**
+ * The "Sundry Debtors" mirror of getBankAccountsSubtreeIds — per
+ * 26-customer-management.md, a Ledger under "Sundry Debtors" (or any
+ * descendant) may only be created through Customer Management, atomically
+ * with its Customer detail row, so the generic Create Ledger screen excludes
+ * this subtree exactly as it excludes "Bank Accounts". Same deliberate
+ * fail-open behavior when the group is absent (see above).
+ */
+export function getSundryDebtorsSubtreeIds(groups: LedgerGroup[]): Set<string> {
+  return getGroupSubtreeIds(groups, [SUNDRY_DEBTORS_GROUP_NAME]);
 }
