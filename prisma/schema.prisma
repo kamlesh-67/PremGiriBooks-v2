@@ -66,26 +66,27 @@ model Company {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  settings       CompanySettings?
-  financialYears FinancialYear[]
-  branches       Branch[]
-  users          User[]
-  roles          Role[]
-  ledgerGroups   LedgerGroup[]
-  ledgers        Ledger[]
-  bankAccounts   BankAccount[]
-  units          Unit[]
-  categories     Category[]
-  brands         Brand[]
-  hsnCodes       HsnCode[]
-  gstRates       GstRate[]
-  warehouses     Warehouse[]
-  products       Product[]
-  marginProfiles MarginProfile[]
-  priceLists     PriceList[]
-  customers      Customer[]
-  suppliers      Supplier[]
-  auditLogs      AuditLog[]
+  settings          CompanySettings?
+  financialYears    FinancialYear[]
+  branches          Branch[]
+  users             User[]
+  roles             Role[]
+  ledgerGroups      LedgerGroup[]
+  ledgers           Ledger[]
+  bankAccounts      BankAccount[]
+  units             Unit[]
+  categories        Category[]
+  brands            Brand[]
+  hsnCodes          HsnCode[]
+  gstRates          GstRate[]
+  warehouses        Warehouse[]
+  products          Product[]
+  marginProfiles    MarginProfile[]
+  priceLists        PriceList[]
+  customers         Customer[]
+  suppliers         Supplier[]
+  auditLogs         AuditLog[]
+  documentSequences DocumentSequence[]
 
   @@index([companyName])
 }
@@ -116,6 +117,8 @@ model FinancialYear {
   updatedAt DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id])
+
+  documentSequences DocumentSequence[]
 
   @@unique([companyId, name])
   @@index([companyId, isCurrent])
@@ -856,4 +859,60 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+// Forward-declarative catalog covering every numbered document on the phase
+// tracker (34-document-number-engine.md) — the Document Number Engine's
+// contract, mirroring the DEFAULT_ROLE_PERMISSIONS precedent of listing
+// entries for modules that don't exist yet. Every one of the Voucher
+// Engine's (spec 31) ten VoucherTypes maps 1:1 to its own dedicated
+// `*_VOUCHER` entry — a document and the voucher it generates are two
+// separately numbered things.
+enum DocumentType {
+  QUOTATION
+  SALES_ORDER
+  DELIVERY_CHALLAN
+  SALES_INVOICE
+  SALES_RETURN
+  CREDIT_NOTE
+  DEBIT_NOTE
+  PURCHASE_ORDER
+  GOODS_RECEIPT_NOTE
+  PURCHASE_INVOICE
+  PURCHASE_RETURN
+  PAYMENT_VOUCHER
+  RECEIPT_VOUCHER
+  CONTRA_VOUCHER
+  JOURNAL_VOUCHER
+  SALES_VOUCHER
+  PURCHASE_VOUCHER
+  CREDIT_NOTE_VOUCHER
+  DEBIT_NOTE_VOUCHER
+  SALES_RETURN_VOUCHER
+  PURCHASE_RETURN_VOUCHER
+  STOCK_ADJUSTMENT
+  STOCK_TRANSFER
+}
+
+// One row per (company, financial year, document type) — the sole owner of
+// sequential document numbering (34-document-number-engine.md). Lazily
+// created on first use (ensureSequence); no seeding. No branchId — Branch
+// Management (spec 12) is unimplemented, and a nullable column inside a
+// composite unique creates the Postgres NULLs-are-distinct trap; a future
+// migration adds the dimension deliberately when branches land.
+model DocumentSequence {
+  id              String        @id @default(uuid())
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id])
+  financialYearId String
+  financialYear   FinancialYear @relation(fields: [financialYearId], references: [id])
+  documentType    DocumentType
+  prefix          String
+  padding         Int           @default(4)
+  nextNumber      Int           @default(1)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([companyId, financialYearId, documentType])
+  @@index([companyId])
 }
