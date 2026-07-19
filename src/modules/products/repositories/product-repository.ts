@@ -1,9 +1,9 @@
-import type { Prisma, ProductType } from "@prisma/client";
+import { Prisma, type ProductType } from "@prisma/client";
 
 import { AppError } from "@/lib/app-error";
 import { prisma } from "@/lib/prisma";
 import { runInTransaction } from "@/lib/transaction";
-import { isRecordNotFoundError } from "@/lib/prisma-errors";
+import { isRecordNotFoundError, isRetryableTransactionError } from "@/lib/prisma-errors";
 import type {
   ActivateProductResult,
   DeactivateProductResult,
@@ -94,6 +94,56 @@ function assertMinStockLevelPrecision(minStockLevel: number, decimalPlaces: numb
       decimalPlaces === 0
         ? "Min stock level must be a whole number — the selected unit has 0 decimal places."
         : `Min stock level can have at most ${decimalPlaces} decimal places — the selected unit's limit.`
+    );
+  }
+}
+
+// The immutability check below is a read-then-write invariant (read
+// "does any StockTransaction exist for this product" then write the
+// product) exactly like warehouse-repository.ts's one-default-per-company
+// flag — a plain Read Committed transaction lets a concurrent Inventory
+// Engine movement batch that itself opened a Serializable transaction
+// (recordMovements — any batch containing an OUT line) race past this
+// check unnoticed. Serializable isolation + bounded P2034 retry on BOTH
+// sides is required for Postgres to actually detect that conflict; this
+// closes the race against any concurrent OUT-containing movement batch.
+// An IN-only movement batch (e.g. a lone OPENING_STOCK/PURCHASE line) does
+// NOT open a Serializable transaction by the Inventory Engine's own design
+// (32-inventory-engine.md: "IN-only batches need no Serializable
+// isolation") — a product edit racing the very first, IN-only movement for
+// that product remains a narrower, unprotected window, same accepted-risk
+// posture as this file's other "no invariant to guard" reference checks.
+const SERIALIZABLE_RETRY = {
+  isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+  retryable: isRetryableTransactionError,
+  conflictMessage: "This product was changed by another request. Please try again.",
+};
+
+/**
+ * Once the Inventory Engine has recorded any movement for a product,
+ * `unitId`/`productType` become immutable — changing either would silently
+ * re-denominate stock history recorded under the old unit/type
+ * (25-product-management.md's forward note; enforced here per
+ * 32-inventory-engine.md's Business Rules, the first consumer of that
+ * note). Only checked when one of the two actually changed — an update
+ * that leaves both alone must keep working even once movements exist.
+ */
+async function assertUnitAndTypeImmutableIfMovementsExist(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  data: ProductPersistData,
+  existing: { unitId: string; productType: ProductType }
+): Promise<void> {
+  if (data.unitId === existing.unitId && data.productType === existing.productType) {
+    return;
+  }
+  const hasMovements = await tx.stockTransaction.findFirst({
+    where: { productId },
+    select: { id: true },
+  });
+  if (hasMovements) {
+    throw new AppError(
+      "This product has recorded stock movements — its unit and product type can no longer be changed."
     );
   }
 }
@@ -320,6 +370,7 @@ export const productRepository = {
         return null;
       }
 
+      await assertUnitAndTypeImmutableIfMovementsExist(tx, id, data, existing);
       await verifyReferences(tx, companyId, data, existing);
 
       try {
@@ -331,7 +382,7 @@ export const productRepository = {
         }
         throw error;
       }
-    });
+    }, SERIALIZABLE_RETRY);
   },
 
   async activate(id: string, companyId: string): Promise<ActivateProductResult> {

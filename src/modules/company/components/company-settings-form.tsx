@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -22,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { updateCompanySettingsAction } from "@/modules/company/actions/company-actions";
 import {
   companySettingsSchema,
@@ -150,6 +152,25 @@ export function CompanySettingsForm({ companyId, defaultValues }: CompanySetting
             )}
           />
         </div>
+
+        <FormField
+          control={form.control}
+          name="allowNegativeStock"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-center justify-between gap-4 rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <FormLabel>Allow Negative Stock</FormLabel>
+                <FormDescription>
+                  When enabled, sales and other outgoing stock movements are allowed even when
+                  they would take a product&apos;s stock below zero.
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch checked={field.value} onCheckedChange={field.onChange} />
+              </FormControl>
+            </FormItem>
+          )}
+        />
 
         <div className="flex justify-end">
           <Button type="submit" disabled={isSubmitting}>
