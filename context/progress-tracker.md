@@ -56,11 +56,42 @@ Mapping so far:
 | 39           | Sales Return (`39-sales-return.md`)                                              | `context/Phases/phase-tracker.md` Phase 3 — Sales Management (#37) — **spec drafted 2026-07-19, not implemented** |
 | 40           | Credit Note (`40-credit-note.md`)                                                | `context/Phases/phase-tracker.md` Phase 3 — Sales Management (#38) — **spec drafted 2026-07-19, not implemented** |
 | 41           | Debit Note (`41-debit-note.md`)                                                  | `context/Phases/phase-tracker.md` Phase 3 — Sales Management (#39) — **spec drafted 2026-07-19, not implemented**; last item in Phase 3 |
+| 42           | Purchase Orders (`42-purchase-orders.md`)                                        | `context/Phases/phase-tracker.md` Phase 4 — Purchase Management (#40) — **spec drafted 2026-07-19, not implemented** |
+| 43           | Goods Receipt Note (`43-goods-receipt-note.md`)                                  | `context/Phases/phase-tracker.md` Phase 4 — Purchase Management (#41) — **spec drafted 2026-07-19, not implemented**; deliberately excludes any Inventory Engine call, mirroring Delivery Challan's (spec 37) identical scope decision |
+| 44           | Purchase Invoice (`44-purchase-invoice.md`)                                      | `context/Phases/phase-tracker.md` Phase 4 — Purchase Management (#42) — **spec drafted 2026-07-19, not implemented**; the pivotal Phase 4 spec — first Purchase-side consumer of Voucher + Inventory + GST Engines together, adds five new Company Settings Purchase/Input-GST ledger-mapping fields reusing spec 38's `roundOffLedgerId` |
+| 45           | Purchase Return (`45-purchase-return.md`)                                        | `context/Phases/phase-tracker.md` Phase 4 — Purchase Management (#43) — **spec drafted 2026-07-19, not implemented**; last item in Phase 4 — the sole purchase-side adjustment document (no Purchase-side Credit/Debit Note pair exists in this phase's scope, unlike Phase 3's three-way split) |
 
 **A third numbering scheme now exists alongside the two above, introduced 2026-07-13**: `context/Phases/phase-tracker.md`, a more granular live tracker (added 2026-07-13) that groups Phase 2 into named sub-groups (Accounting Foundation, Inventory Masters, Business Parties, Pricing, Shared ERP Engines) with its own `#` column (00–78) that does **not** match either `phases.md`'s business-domain Phase numbers or this file's own sequential feature-spec numbers. Feature-specs 13–17 (this table) correspond to `phase-tracker.md`'s items #12–#16 ("Accounting Foundation" group) — a coincidental near-alignment for this one group only (off by exactly one, the same off-by-one every earlier spec file number carries versus its 0-indexed tracker slot); do not assume this alignment holds for later groups. Going forward, `context/Phases/phase-tracker.md` is the authoritative day-to-day status board (its own Progress Legend/status column), `phases.md` remains the static business-domain roadmap reference, and this file's mapping table remains the sequential-implementation-order index — three different axes, not three competing sources of truth.
 
 ## Current Phase
 
+- **Feature-specs 42–45 (all four Phase 4 — Purchase Management documents) drafted
+  2026-07-19 on explicit user request** ("create for phase 4"), covering
+  `phase-tracker.md`'s Phase 4 items #40–#43 in full: Purchase Orders (42), Goods
+  Receipt Note (43), Purchase Invoice (44), Purchase Return (45) — none implemented yet.
+  Written as the purchase-side mirror of the Phase 3 set (specs 35–41, drafted
+  immediately prior in the same session): Purchase Order → Goods Receipt Note →
+  Purchase Invoice → Purchase Return, the same linear-chain shape with Voucher/
+  Inventory/GST posting concentrated in Purchase Invoice alone, and Goods Receipt Note
+  deliberately not calling the Inventory Engine (mirroring Delivery Challan's identical
+  scope decision — stock only moves at Purchase Invoice time). Key differences from the
+  Sales-side set, recorded across the specs: no Quick/Walk-in-supplier equivalent (every
+  Purchase Invoice requires an existing Supplier, spec 27); no Pricing Engine call
+  anywhere in this phase (`rate` prefills from `product.purchasePrice`, not
+  `resolvePrice`, since a purchase has no customer-tier/price-list/margin dimension); no
+  below-cost concept (selling-side only); `PurchaseInvoice` adds a required, per-supplier-
+  unique `supplierInvoiceNumber` (the supplier's own bill number) alongside this system's
+  own generated `invoiceNumber`; the new Company Settings Purchase/Input-GST ledger
+  mapping (`purchaseLedgerId`/`inputCgstLedgerId`/`inputSgstLedgerId`/
+  `inputIgstLedgerId`/`inputCessLedgerId`) reuses spec 38's `roundOffLedgerId` rather than
+  adding a second Round Off account; Purchase Return is the **sole** purchase-side
+  adjustment document — the tracker's Phase 4 table has no Purchase-side Credit Note/
+  Debit Note pair, unlike Phase 3's three-way Sales Return/Credit Note/Debit Note split,
+  a recorded asymmetry rather than an oversight. Printing/PDF/WhatsApp remain deferred
+  across all four specs, with no browser-print exception on Purchase Invoice (unlike
+  Sales Invoice) since a supplier's own bill, not a system-generated document, is the
+  authoritative paper trail. Per `ai-workflow-rules.md`'s one-feature-at-a-time rule,
+  none of these four should be implemented without explicit per-spec instruction.
 - **Feature-specs 35–41 (all seven Phase 3 — Sales Management documents) drafted
   2026-07-19 on explicit user request** ("create `context/feature-specs/` for Phase 3 —
   Sales Management"), covering `phase-tracker.md`'s Phase 3 items #33–#39 in full:
