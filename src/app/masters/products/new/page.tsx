@@ -7,6 +7,7 @@ import { brandService } from "@/modules/brands/services/brand-service";
 import { categoryService } from "@/modules/categories/services/category-service";
 import { gstRateService } from "@/modules/gst-rates/services/gst-rate-service";
 import { hsnCodeService } from "@/modules/hsn-codes/services/hsn-code-service";
+import { marginProfileService } from "@/modules/margin-profiles/services/margin-profile-service";
 import { ProductForm } from "@/modules/products/components/product-form";
 import { buildProductFormOptions } from "@/modules/products/utils/product-form-options";
 import { unitService } from "@/modules/units/services/unit-service";
@@ -19,18 +20,20 @@ export default async function NewProductPage() {
     redirect("/masters/products");
   }
 
-  // The six sibling masters' active-only lookups (each built for this form,
-  // per specs 19–24). HSN codes come unfiltered — the form itself narrows to
-  // HSN-vs-SAC based on the chosen product type.
-  const [isAdmin, categories, brands, units, hsnCodes, gstRates, warehouses] = await Promise.all([
-    isCurrentUserCompanyAdmin(),
-    categoryService.listSelectableCategories(),
-    brandService.listSelectableBrands(),
-    unitService.listSelectableUnits(),
-    hsnCodeService.listSelectableHsnCodes(),
-    gstRateService.listSelectableGstRates(),
-    warehouseService.listSelectableWarehouses(),
-  ]);
+  // The seven sibling masters' active-only lookups (each built for this
+  // form, per specs 19–24 and 28). HSN codes come unfiltered — the form
+  // itself narrows to HSN-vs-SAC based on the chosen product type.
+  const [isAdmin, categories, brands, units, hsnCodes, gstRates, warehouses, marginProfiles] =
+    await Promise.all([
+      isCurrentUserCompanyAdmin(),
+      categoryService.listSelectableCategories(),
+      brandService.listSelectableBrands(),
+      unitService.listSelectableUnits(),
+      hsnCodeService.listSelectableHsnCodes(),
+      gstRateService.listSelectableGstRates(),
+      warehouseService.listSelectableWarehouses(),
+      marginProfileService.listSelectableMarginProfiles(),
+    ]);
 
   const options = buildProductFormOptions({
     categories,
@@ -39,6 +42,7 @@ export default async function NewProductPage() {
     hsnCodes,
     gstRates,
     warehouses,
+    marginProfiles,
   });
 
   return (

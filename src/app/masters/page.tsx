@@ -9,6 +9,7 @@ import {
   Percent,
   Ruler,
   Tag,
+  TrendingUp,
   Truck,
   Users,
   Warehouse,
@@ -72,6 +73,12 @@ const MASTERS_MODULES = [
     icon: Package,
     title: "Products",
     description: "Manage the product/item master referenced by sales, purchase, and stock documents.",
+  },
+  {
+    href: "/masters/margin-profiles",
+    icon: TrendingUp,
+    title: "Margin Profiles",
+    description: "Manage the named margin/markup pricing rules the Pricing Engine will apply.",
   },
   {
     href: "/masters/customers",

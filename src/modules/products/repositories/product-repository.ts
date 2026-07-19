@@ -22,6 +22,7 @@ export interface ProductPersistData {
   hsnCodeId: string | null;
   gstRateId: string | null;
   defaultWarehouseId: string | null;
+  marginProfileId: string | null;
   mrp: number | null;
   sellingPrice: number | null;
   purchasePrice: number | null;
@@ -123,6 +124,7 @@ const PRODUCT_INCLUDE = {
   hsnCode: { select: HSN_OPTION_SELECT },
   gstRate: { select: MASTER_OPTION_SELECT },
   defaultWarehouse: { select: MASTER_OPTION_SELECT },
+  marginProfile: { select: MASTER_OPTION_SELECT },
 } as const;
 
 type ProductRow = Prisma.ProductGetPayload<{ include: typeof PRODUCT_INCLUDE }>;
@@ -189,7 +191,16 @@ async function verifyReferences(
   tx: Prisma.TransactionClient,
   companyId: string,
   data: ProductPersistData,
-  existing: { unitId: string; categoryId: string | null; brandId: string | null; hsnCodeId: string | null; gstRateId: string | null; defaultWarehouseId: string | null; productType: ProductType } | null
+  existing: {
+    unitId: string;
+    categoryId: string | null;
+    brandId: string | null;
+    hsnCodeId: string | null;
+    gstRateId: string | null;
+    defaultWarehouseId: string | null;
+    marginProfileId: string | null;
+    productType: ProductType;
+  } | null
 ): Promise<void> {
   // Unit — required for every type. Read even when unchanged if
   // minStockLevel is set: the precision rule needs decimalPlaces (a plain
@@ -249,6 +260,16 @@ async function verifyReferences(
   ) {
     const warehouse = await tx.warehouse.findUnique({ where: { id: data.defaultWarehouseId } });
     assertAssignable(warehouse, companyId, "warehouse");
+  }
+
+  if (
+    data.marginProfileId &&
+    (!existing || data.marginProfileId !== existing.marginProfileId)
+  ) {
+    const marginProfile = await tx.marginProfile.findUnique({
+      where: { id: data.marginProfileId },
+    });
+    assertAssignable(marginProfile, companyId, "margin profile");
   }
 }
 

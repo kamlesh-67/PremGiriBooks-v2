@@ -2,6 +2,7 @@ import type { Brand } from "@/types/brand";
 import type { Category } from "@/types/category";
 import type { GstRate } from "@/types/gst-rate";
 import type { HsnCode } from "@/types/hsn-code";
+import type { MarginProfile } from "@/types/margin-profile";
 import type {
   ProductHsnOption,
   ProductMasterOption,
@@ -11,7 +12,7 @@ import type {
 import type { Unit } from "@/types/unit";
 import type { WarehouseWithBranch } from "@/types/warehouse";
 
-/** The six pickers' options, assembled server-side by the new/edit pages. */
+/** The seven pickers' options, assembled server-side by the new/edit pages. */
 export interface ProductFormOptions {
   categories: ProductMasterOption[];
   brands: ProductMasterOption[];
@@ -19,6 +20,7 @@ export interface ProductFormOptions {
   hsnCodes: ProductHsnOption[];
   gstRates: ProductMasterOption[];
   warehouses: ProductMasterOption[];
+  marginProfiles: ProductMasterOption[];
 }
 
 // The sibling modules' listSelectable…() lookups return active masters only.
@@ -44,6 +46,7 @@ export interface ProductFormOptionSources {
   hsnCodes: HsnCode[];
   gstRates: GstRate[];
   warehouses: WarehouseWithBranch[];
+  marginProfiles: MarginProfile[];
 }
 
 export function buildProductFormOptions(
@@ -75,5 +78,6 @@ export function buildProductFormOptions(
     ),
     gstRates: withCurrent(sources.gstRates.map(toMasterOption), product?.gstRate),
     warehouses: withCurrent(sources.warehouses.map(toMasterOption), product?.defaultWarehouse),
+    marginProfiles: withCurrent(sources.marginProfiles.map(toMasterOption), product?.marginProfile),
   };
 }

@@ -58,6 +58,7 @@ export interface ProductWithRelations extends Product {
   hsnCode: ProductHsnOption | null;
   gstRate: ProductMasterOption | null;
   defaultWarehouse: ProductMasterOption | null;
+  marginProfile: ProductMasterOption | null;
 }
 
 export type ProductStatusFilter = "all" | "active" | "inactive";
