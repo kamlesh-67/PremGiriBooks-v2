@@ -155,6 +155,14 @@ export function calculateDocument(rawLines: readonly CalculateLineInput[]): Calc
 
   for (const lineInput of lines) {
     const result = calculateLine(lineInput);
+    const taxableAmountPaise = toPaise(result.taxableAmount);
+    const cgstPaise = toPaise(result.cgst);
+    const sgstPaise = toPaise(result.sgst);
+    const igstPaise = toPaise(result.igst);
+    const cessPaise = toPaise(result.cess);
+    const totalTaxPaise = toPaise(result.totalTax);
+    const totalAmountPaise = toPaise(result.totalAmount);
+
     const key = groupKey(lineInput.ratePercent, lineInput.cessPercent);
     const accumulator: GroupAccumulator = groups.get(key) ?? {
       ratePercent: lineInput.ratePercent,
@@ -167,21 +175,21 @@ export function calculateDocument(rawLines: readonly CalculateLineInput[]): Calc
       totalTaxPaise: 0,
     };
 
-    accumulator.taxableAmountPaise += toPaise(result.taxableAmount);
-    accumulator.cgstPaise += toPaise(result.cgst);
-    accumulator.sgstPaise += toPaise(result.sgst);
-    accumulator.igstPaise += toPaise(result.igst);
-    accumulator.cessPaise += toPaise(result.cess);
-    accumulator.totalTaxPaise += toPaise(result.totalTax);
+    accumulator.taxableAmountPaise += taxableAmountPaise;
+    accumulator.cgstPaise += cgstPaise;
+    accumulator.sgstPaise += sgstPaise;
+    accumulator.igstPaise += igstPaise;
+    accumulator.cessPaise += cessPaise;
+    accumulator.totalTaxPaise += totalTaxPaise;
     groups.set(key, accumulator);
 
-    docTaxableAmountPaise += toPaise(result.taxableAmount);
-    docCgstPaise += toPaise(result.cgst);
-    docSgstPaise += toPaise(result.sgst);
-    docIgstPaise += toPaise(result.igst);
-    docCessPaise += toPaise(result.cess);
-    docTotalTaxPaise += toPaise(result.totalTax);
-    docTotalAmountPaise += toPaise(result.totalAmount);
+    docTaxableAmountPaise += taxableAmountPaise;
+    docCgstPaise += cgstPaise;
+    docSgstPaise += sgstPaise;
+    docIgstPaise += igstPaise;
+    docCessPaise += cessPaise;
+    docTotalTaxPaise += totalTaxPaise;
+    docTotalAmountPaise += totalAmountPaise;
   }
 
   const groupResults: DocumentGroupResult[] = [...groups.values()].map((accumulator) => ({
