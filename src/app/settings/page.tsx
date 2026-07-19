@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ShieldCheck, Users as UsersIcon } from "lucide-react";
+import { Hash, ShieldCheck, Users as UsersIcon } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,12 @@ const SETTINGS_MODULES = [
     icon: ShieldCheck,
     title: "Roles & Permissions",
     description: "Manage roles and the permissions each role grants.",
+  },
+  {
+    href: "/settings/document-numbering",
+    icon: Hash,
+    title: "Document Numbering",
+    description: "Configure the prefix and padding each document type uses when numbering.",
   },
 ] as const;
 
