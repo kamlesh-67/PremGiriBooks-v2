@@ -112,6 +112,14 @@ Feature-specs for the remaining six items were all drafted 2026-07-14 (spec-file
 
 ## Business Parties
 
+Feature-specs for both items were drafted 2026-07-18 (not yet implemented). Spec-file
+numbers are sequential and never reused, so they diverge from tracker numbers:
+
+| Tracker # | Feature             | Spec file                                          |
+| --------- | ------------------- | -------------------------------------------------- |
+| 24        | Customer Management | `context/feature-specs/26-customer-management.md`  |
+| 25        | Supplier Management | `context/feature-specs/27-supplier-management.md`  |
+
 | #   | Feature             | Depends On    | Status |
 | --- | ------------------- | ------------- | ------ |
 | 24  | Customer Management | Ledger Master | ⬜     |
@@ -120,6 +128,17 @@ Feature-specs for the remaining six items were all drafted 2026-07-14 (spec-file
 ---
 
 ## Pricing
+
+Feature-specs for all three items were drafted 2026-07-18 (not yet implemented).
+Implementation order within the group: #26 → #27 → #28 (each spec depends on the prior;
+the Pricing Engine additionally requires Customer Management #24 to be implemented
+first, for `Customer.priceListId`):
+
+| Tracker # | Feature         | Spec file                                          |
+| --------- | --------------- | -------------------------------------------------- |
+| 26        | Margin Profiles | `context/feature-specs/28-margin-profiles.md`      |
+| 27        | Price Lists     | `context/feature-specs/29-price-lists.md`          |
+| 28        | Pricing Engine  | `context/feature-specs/30-pricing-engine.md`       |
 
 | #   | Feature         | Depends On                         | Status |
 | --- | --------------- | ---------------------------------- | ------ |
@@ -131,12 +150,26 @@ Feature-specs for the remaining six items were all drafted 2026-07-14 (spec-file
 
 ## Shared ERP Engines
 
-| #   | Feature                | Depends On                        | Status |
-| --- | ---------------------- | --------------------------------- | ------ |
-| 29  | Voucher Engine         | Ledger Master                     | ⬜     |
-| 30  | Inventory Engine       | Products + Warehouse              | ⬜     |
-| 31  | GST Engine             | GST Rates + HSN                   | ⬜     |
-| 32  | Document Number Engine | Company + Financial Year + Branch | ⬜     |
+Feature-specs for all four items were drafted 2026-07-18 (not yet implemented).
+Recommended implementation order within the group: **#32 first** (the Voucher Engine
+generates voucher numbers through it), then #29; #30 and #31 are independent of the
+others and of each other. Specs 31 and 34 deliberately exclude the branch dimension
+while Branch Management (feature-spec 12) remains unimplemented — each records a
+forward-note migration:
+
+| Tracker # | Feature                | Spec file                                              |
+| --------- | ---------------------- | ------------------------------------------------------ |
+| 29        | Voucher Engine         | `context/feature-specs/31-voucher-engine.md`           |
+| 30        | Inventory Engine       | `context/feature-specs/32-inventory-engine.md`         |
+| 31        | GST Engine             | `context/feature-specs/33-gst-engine.md`               |
+| 32        | Document Number Engine | `context/feature-specs/34-document-number-engine.md`   |
+
+| #   | Feature                | Depends On                                          | Status |
+| --- | ---------------------- | --------------------------------------------------- | ------ |
+| 29  | Voucher Engine         | Ledger Master                                       | ⬜     |
+| 30  | Inventory Engine       | Products + Warehouse                                | ⬜     |
+| 31  | GST Engine             | GST Rates + HSN                                     | ⬜     |
+| 32  | Document Number Engine | Company + Financial Year (branch dimension deferred — see spec 34) | ⬜     |
 
 ---
 
@@ -277,7 +310,7 @@ These are intentionally outside the first production release.
 
 **Next Feature to Implement**
 
-➡ **23 - Product Management** (Inventory Masters group, the last item) — spec drafted 2026-07-14 as `context/feature-specs/25-product-management.md`. Warehouse Management (#22, `context/feature-specs/24-warehouse-management.md`) was implemented 2026-07-18 on branch `24-product-management` (branch names don't follow spec-file numbering); GST Rate (#21) and HSN (#20) were implemented 2026-07-15, Brand (#19), Category (#18), and Unit (#17) earlier the same week. Every dependency of Product Management (Categories + Brands + Units + GST + HSN + Warehouse) is now ✅, so it is unblocked — but the specific next feature still awaits explicit user direction, since feature-spec 12 (Branch Management) remains drafted-but-unimplemented from a prior session (see the Phase 1 status-discrepancy note above; Warehouse shipped with its branch link optional and its Branch picker empty until Branch Management lands) and per `ai-workflow-rules.md` only one feature is worked at a time.
+➡ **24 - Customer Management** (Business Parties group) — spec drafted 2026-07-18 as `context/feature-specs/26-customer-management.md`. **Every remaining Phase 2 item now has a drafted spec (2026-07-18)**: Business Parties #24–#25 (specs 26–27), Pricing #26–#28 (specs 28–30), Shared ERP Engines #29–#32 (specs 31–34) — see each group's spec-file table above, including the recommended implementation order (26 → 27; 28 → 29 → 30; engines: 34 → 31, with 32/33 independent). All of #24's dependencies are ✅, so it is unblocked — but the specific next feature still awaits explicit user direction, since feature-spec 12 (Branch Management) remains drafted-but-unimplemented from a prior session (see the Phase 1 status-discrepancy note above) and per `ai-workflow-rules.md` only one feature is worked at a time.
 
 ---
 
